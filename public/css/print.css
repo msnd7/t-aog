@@ -1,0 +1,96 @@
+/* ورقة طباعة الشيكات التحفيزية */
+:root {
+  --blue: #14528f;
+  --blue-dark: #0e3c6b;
+  --green: #2f7a2a;
+  --orange: #d98200;
+  --gold: #f6c445;
+  --ink: #14202e;
+  --line: #cdd6e2;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: #eceae4; color: var(--ink);
+  font-family: "Segoe UI", "Noto Kufi Arabic", Tahoma, system-ui, sans-serif;
+}
+
+.toolbar {
+  position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between;
+  gap: 1rem; flex-wrap: wrap; background: #fff; padding: .8rem 1.2rem; border-bottom: 1px solid var(--line);
+}
+.toolbar__actions { display: flex; gap: .6rem; align-items: center; }
+.switch { display: flex; align-items: center; gap: .4rem; font-size: .9rem; }
+.btn {
+  background: var(--blue); color: #fff; border: 1px solid transparent; border-radius: 10px;
+  padding: .55rem 1rem; font-weight: 700; cursor: pointer; font-size: .95rem;
+}
+.btn--ghost { background: #fff; color: var(--blue); border-color: var(--line); }
+
+.sheet { padding: 10mm 6mm; max-width: 210mm; margin: 0 auto; }
+
+.cheque {
+  position: relative; background: #fff; border: 2px solid var(--blue); border-radius: 8px;
+  padding: 6mm 7mm; margin-bottom: 6mm; height: 88mm; overflow: hidden;
+  background-image:
+    repeating-linear-gradient(45deg, rgba(20, 82, 143, .035) 0 6px, transparent 6px 12px),
+    linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
+  break-inside: avoid; page-break-inside: avoid;
+}
+.cheque--attendance { border-color: var(--blue); }
+.cheque--recitation { border-color: var(--green); }
+.cheque--discipline { border-color: var(--orange); }
+
+.cheque__head { display: flex; align-items: center; justify-content: space-between; gap: 6mm; border-bottom: 1px dashed var(--line); padding-bottom: 3mm; }
+.cheque__brand { display: flex; align-items: center; gap: 3mm; }
+.cheque__brand img { width: 18mm; height: 18mm; object-fit: contain; }
+.cheque__brand h1 { font-size: 4.4mm; margin: 0; color: var(--blue-dark); }
+.cheque__brand p { font-size: 2.9mm; margin: 0; color: #5b6b7f; }
+.cheque__type { text-align: center; }
+.cheque__type strong { display: block; font-size: 5mm; color: var(--blue-dark); }
+.cheque__type span { font-size: 3mm; color: #5b6b7f; }
+.cheque__serial { text-align: left; font-size: 3.1mm; color: #5b6b7f; line-height: 1.7; }
+.cheque__serial b { color: var(--ink); font-size: 3.6mm; }
+
+.cheque__body { display: flex; gap: 5mm; margin-top: 4mm; }
+.cheque__main { flex: 1; }
+.pay-line { display: flex; align-items: flex-end; gap: 3mm; margin-bottom: 3.5mm; }
+.pay-line .label { font-size: 3.4mm; color: #5b6b7f; white-space: nowrap; }
+.pay-line .value { flex: 1; border-bottom: 1px dotted #98a7b8; font-size: 5.2mm; font-weight: 800; padding-bottom: 1mm; }
+.pay-line .value.sm { font-size: 4mm; font-weight: 600; }
+
+.amount-row { display: flex; align-items: center; gap: 4mm; margin-top: 2mm; }
+.amount-box {
+  border: 2px solid var(--blue); border-radius: 6px; padding: 2mm 5mm; background: #fff;
+  font-size: 8mm; font-weight: 800; color: var(--blue-dark); font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.cheque--recitation .amount-box { border-color: var(--green); color: var(--green); }
+.cheque--discipline .amount-box { border-color: var(--orange); color: var(--orange); }
+.amount-words { font-size: 3.6mm; color: #33465c; }
+.items { display: flex; flex-wrap: wrap; gap: 2mm; margin-top: 3mm; }
+.item-chip { border: 1px solid var(--line); border-radius: 999px; padding: 1mm 3mm; font-size: 3.2mm; background: #fff; }
+.item-chip b { color: var(--blue-dark); }
+
+.cheque__side { width: 34mm; text-align: center; }
+.cheque__side svg { width: 100%; height: 20mm; }
+.cheque__side .code { font-size: 3mm; letter-spacing: .5px; color: #5b6b7f; }
+.cheque__photo { width: 22mm; height: 22mm; border-radius: 50%; object-fit: cover; border: 1px solid var(--line); margin: 0 auto 2mm; display: block; }
+
+.cheque__foot { position: absolute; inset-inline: 7mm; bottom: 5mm; display: flex; align-items: flex-end; justify-content: space-between; gap: 6mm; }
+.sign { text-align: center; min-width: 42mm; }
+.sign .line { border-top: 1px solid #7d8ea3; margin-bottom: 1mm; }
+.sign span { font-size: 3.1mm; color: #5b6b7f; }
+.cheque__note { font-size: 3mm; color: #5b6b7f; max-width: 60mm; }
+.watermark {
+  position: absolute; inset-inline-end: 30mm; bottom: 12mm; font-size: 22mm; font-weight: 800;
+  color: rgba(20, 82, 143, .05); pointer-events: none; user-select: none;
+}
+
+.empty { text-align: center; padding: 4rem 1rem; color: #5b6b7f; }
+
+@media print {
+  body { background: #fff; }
+  .no-print { display: none !important; }
+  .sheet { padding: 0; max-width: none; }
+  .cheque { margin: 0 0 4mm; box-shadow: none; }
+  @page { size: A4 portrait; margin: 8mm; }
+}

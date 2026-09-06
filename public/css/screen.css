@@ -1,0 +1,74 @@
+/* شاشة العرض في القاعة: فارس الأسبوع، حلقة الأسبوع، الصدارة */
+:root {
+  --blue: #14528f;
+  --blue-dark: #0b2f56;
+  --gold: #f6c445;
+  --green: #58c04a;
+  --ink: #0a1b2e;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--blue-dark); color: #fff;
+  font-family: "Segoe UI", "Noto Kufi Arabic", Tahoma, system-ui, sans-serif; overflow: hidden; }
+.screen { height: 100vh; display: flex; flex-direction: column;
+  background: radial-gradient(circle at 20% 0%, #1b6bb5 0%, #0b2f56 55%, #071e39 100%); }
+
+.screen__head { display: flex; align-items: center; justify-content: space-between; padding: 1.4vh 2.4vw; gap: 1rem; }
+.brand { display: flex; align-items: center; gap: 1rem; }
+.brand img { width: 8vh; height: 8vh; object-fit: contain; background: #fff; border-radius: 1.4vh; padding: .5vh; }
+.brand h1 { font-size: clamp(1.1rem, 2.4vh, 2rem); margin: 0; }
+.brand p { margin: 0; font-size: clamp(.7rem, 1.6vh, 1.1rem); opacity: .75; }
+.head-right { text-align: left; }
+.clock { font-size: clamp(1rem, 3vh, 2.2rem); font-weight: 800; font-variant-numeric: tabular-nums; }
+.period { opacity: .75; font-size: clamp(.7rem, 1.7vh, 1.1rem); }
+
+.stage { flex: 1; padding: 0 3vw; display: grid; place-items: center; overflow: hidden; }
+.loading { opacity: .7; font-size: 2vh; }
+.slide { width: 100%; animation: fade .6s ease; }
+@keyframes fade { from { opacity: 0; transform: translateY(18px); } }
+
+.slide__title { text-align: center; font-size: clamp(1.4rem, 5vh, 4rem); font-weight: 800; margin: 0 0 2vh;
+  background: linear-gradient(90deg, var(--gold), #fff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+/* فارس الأسبوع */
+.knight { display: flex; align-items: center; justify-content: center; gap: 4vw; flex-wrap: wrap; }
+.knight__photo { width: 34vh; height: 34vh; border-radius: 50%; object-fit: cover; border: 1vh solid var(--gold);
+  box-shadow: 0 2vh 6vh rgba(0,0,0,.45); background: #fff; display: grid; place-content: center; color: var(--blue);
+  font-size: 12vh; font-weight: 800; }
+.knight__name { font-size: clamp(2rem, 8vh, 6rem); font-weight: 800; line-height: 1.1; }
+.knight__meta { font-size: clamp(1rem, 3vh, 2.2rem); opacity: .85; }
+.knight__points { display: inline-block; margin-top: 2vh; background: var(--gold); color: #3a2a00;
+  padding: 1vh 3vw; border-radius: 999px; font-size: clamp(1.1rem, 3.4vh, 2.6rem); font-weight: 800; }
+
+/* حلقة الأسبوع */
+.halaqa-card { text-align: center; }
+.halaqa-card .name { font-size: clamp(2rem, 8vh, 5.5rem); font-weight: 800; color: var(--gold); }
+.halaqa-card .teacher { font-size: clamp(1rem, 3vh, 2.2rem); opacity: .85; }
+.members { display: flex; justify-content: center; gap: 1.6vw; flex-wrap: wrap; margin-top: 3vh; }
+.member { background: rgba(255,255,255,.1); border-radius: 2vh; padding: 1.4vh 1.6vw; min-width: 12vw; }
+.member strong { display: block; font-size: clamp(.9rem, 2.4vh, 1.6rem); }
+.member span { opacity: .8; font-size: clamp(.7rem, 1.8vh, 1.1rem); }
+
+/* الصدارة */
+.board { display: grid; grid-template-columns: repeat(auto-fit, minmax(28vw, 1fr)); gap: 2vw; width: 100%; }
+.board__col { background: rgba(255,255,255,.08); border-radius: 2.4vh; padding: 2vh 1.6vw; }
+.board__col h3 { margin: 0 0 1.4vh; font-size: clamp(1rem, 2.8vh, 2rem); color: var(--gold); text-align: center; }
+.row { display: flex; align-items: center; gap: 1vw; padding: 1vh .6vw; border-bottom: 1px solid rgba(255,255,255,.12);
+  font-size: clamp(.85rem, 2.3vh, 1.5rem); }
+.row:last-child { border-bottom: 0; }
+.rank { width: 4.4vh; height: 4.4vh; border-radius: 50%; display: grid; place-content: center; font-weight: 800;
+  background: rgba(255,255,255,.15); flex: 0 0 auto; font-size: clamp(.75rem, 2vh, 1.2rem); }
+.rank.r1 { background: var(--gold); color: #3a2a00; }
+.rank.r2 { background: #d7dde3; color: #223; }
+.rank.r3 { background: #d08a4e; color: #2a1600; }
+.row .who { flex: 1; display: flex; align-items: center; gap: .8vw; min-width: 0; }
+.row .who img, .row .who .ph { width: 5vh; height: 5vh; border-radius: 50%; object-fit: cover; background: rgba(255,255,255,.2);
+  display: grid; place-content: center; font-weight: 700; flex: 0 0 auto; }
+.row .who b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .pts { font-weight: 800; color: var(--green); font-variant-numeric: tabular-nums; }
+.row .sub { opacity: .65; font-size: .8em; }
+
+.screen__foot { display: flex; align-items: center; justify-content: space-between; padding: 1.4vh 2.4vw; font-size: 1.6vh; opacity: .7; }
+.dots { display: flex; gap: .6vw; }
+.dot { width: 1.2vh; height: 1.2vh; border-radius: 50%; background: rgba(255,255,255,.3); }
+.dot.active { background: var(--gold); }
+.empty-slide { text-align: center; font-size: 3vh; opacity: .8; }

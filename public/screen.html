@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>شاشة العرض — رياض القرآن</title>
+  <meta name="theme-color" content="#0e3c6b">
+  <link rel="icon" href="/img/favicon.png">
+  <link rel="stylesheet" href="/css/screen.css">
+</head>
+<body>
+  <div class="screen" id="screen">
+    <header class="screen__head">
+      <div class="brand">
+        <img id="logo" src="/img/logo.jpg" alt="شعار المجمع">
+        <div>
+          <h1 id="academy">مجمع رياض القرآن التعليمي</h1>
+          <p id="subtitle"></p>
+        </div>
+      </div>
+      <div class="head-right">
+        <div class="clock" id="clock"></div>
+        <div class="period" id="period">هذا الأسبوع</div>
+      </div>
+    </header>
+
+    <main id="stage" class="stage"><div class="loading">جارِ التحميل…</div></main>
+
+    <footer class="screen__foot">
+      <div class="dots" id="dots"></div>
+      <div class="hint">تُحدَّث الشاشة تلقائياً · اضغط مفتاح المسافة للتنقل</div>
+    </footer>
+  </div>
+  <script type="module" src="/js/screen.js"></script>
+</body>
+</html>
