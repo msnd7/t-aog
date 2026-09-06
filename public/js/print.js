@@ -4,8 +4,20 @@ import { drawBarcode } from './barcode.js';
 const esc = (value) => String(value ?? '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const num = (value) => Number(value || 0).toLocaleString('en-US');
-const dateAr = (value) => new Intl.DateTimeFormat('ar-SA-u-ca-gregory-nu-latn',
-  { year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(value));
+const pad = (value) => String(value).padStart(2, '0');
+
+/** تواريخ الشيك تُبنى يدوياً لتبقى بأرقام لاتينية ومرتبة داخل النص العربي */
+const gregorianDate = (value) => {
+  const date = new Date(value);
+  return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())}`;
+};
+
+const hijriDate = (value) => {
+  const parts = new Intl.DateTimeFormat('en-u-ca-islamic-umalqura',
+    { year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date(value));
+  const part = (type) => (parts.find((item) => item.type === type) || {}).value || '';
+  return `${part('year')}/${pad(part('month'))}/${pad(part('day'))}`;
+};
 
 const TYPE_TITLES = {
   attendance: 'شيك الحضور',
@@ -32,7 +44,8 @@ function chequeMarkup(cheque, settings) {
         </div>
         <div class="cheque__serial">
           رقم الشيك: <b dir="ltr">${esc(cheque.serial)}</b><br>
-          التاريخ: <b dir="ltr">${dateAr(cheque.issued_at)}</b>
+          التاريخ: <b dir="ltr">${gregorianDate(cheque.issued_at)}</b> م<br>
+          الموافق: <b dir="ltr">${hijriDate(cheque.issued_at)}</b> هـ
         </div>
       </header>
 
