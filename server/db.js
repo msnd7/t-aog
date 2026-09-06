@@ -1,13 +1,32 @@
 'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
-const { DatabaseSync } = require('node:sqlite');
-
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
-const db = new DatabaseSync(path.join(DATA_DIR, 'app.db'));
+/**
+ * محرّك SQLite: يُستخدم المدمج في Node 22.5+ (node:sqlite)، وإن كانت
+ * الاستضافة تعمل بإصدار أقدم فتُستخدم حزمة better-sqlite3 إن كانت مثبّتة.
+ * الواجهتان متطابقتان في ما تستخدمه المنصة (prepare / run / get / all / exec).
+ */
+function openDatabase(file) {
+  try {
+    const { DatabaseSync } = require('node:sqlite');
+    if (DatabaseSync) return new DatabaseSync(file);
+  } catch { /* إصدار Node لا يوفّر node:sqlite */ }
+  try {
+    const BetterSqlite3 = require('better-sqlite3');
+    return new BetterSqlite3(file);
+  } catch {
+    throw new Error(
+      'تعذّر تشغيل قاعدة البيانات: تحتاج Node.js 22.5 أو أحدث، '
+      + 'أو ثبّت الحزمة البديلة بالأمر: npm install better-sqlite3'
+    );
+  }
+}
+
+const db = openDatabase(path.join(DATA_DIR, 'app.db'));
 db.exec('PRAGMA journal_mode = WAL');
 db.exec('PRAGMA foreign_keys = ON');
 

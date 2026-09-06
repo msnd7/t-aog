@@ -69,6 +69,37 @@ docker run -d --name riyad-quran -p 3000:3000 \
   --restart unless-stopped riyad-quran
 ```
 
+## استضافة موجودة لديك مسبقاً
+
+### لوحة cPanel (خيار «Setup Node.js App»)
+
+1. ارفع المشروع إلى مجلد على الاستضافة (أو استورده من GitHub عبر Git Version Control في cPanel).
+2. من cPanel افتح **Setup Node.js App ← Create Application**:
+   - **Node.js version**: ٢٢ فأحدث إن توفّرت (وإلا اقرأ التنبيه أدناه).
+   - **Application root**: مجلد المشروع.
+   - **Application URL**: النطاق أو النطاق الفرعي.
+   - **Application startup file**: `app.js` (موجود في جذر المشروع لهذا الغرض).
+3. أضف متغيرات البيئة: `ADMIN_PHONE=05xxxxxxxx` و `DATA_DIR=/home/USER/riyad-data` و `COOKIE_SECURE=1` و `TZ=Asia/Riyadh`.
+4. اضغط **Run NPM Install** ثم **Restart**.
+
+> **تنبيه الإصدار**: المنصة تستخدم قاعدة SQLite المدمجة في Node.js 22.5 فأحدث.
+> إن كانت استضافتك على إصدار أقدم (١٨ أو ٢٠) فشغّل `npm install better-sqlite3` مرة واحدة،
+> وسيستخدمها النظام تلقائياً بديلاً عن المدمجة.
+
+### خادم Linux خاص بك — أمر واحد
+
+```bash
+git clone https://github.com/msnd7/t-aog.git && cd t-aog
+sudo bash deploy/install.sh quran.example.com 05xxxxxxxx
+```
+
+يثبّت Node.js والخدمة وNginx وشهادة HTTPS، ويطبع رابط الموقع وبيانات دخول المدير.
+التحديث لاحقاً: أعد تشغيل السكربت نفسه.
+
+### استضافة تدعم Docker
+
+استخدم أوامر Docker في القسم السابق، مع تركيب مجلد دائم على `/data`.
+
 ---
 
 ## بعد النشر مباشرة
