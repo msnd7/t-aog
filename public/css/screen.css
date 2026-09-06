@@ -8,7 +8,7 @@
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--blue-dark); color: #fff;
-  font-family: "Segoe UI", "Noto Kufi Arabic", Tahoma, system-ui, sans-serif; overflow: hidden; }
+  font-family: 'IBM Plex Sans Arabic', 'Segoe UI', 'Noto Kufi Arabic', Tahoma, system-ui, sans-serif; overflow: hidden; }
 .screen { height: 100vh; display: flex; flex-direction: column;
   background: radial-gradient(circle at 20% 0%, #1b6bb5 0%, #0b2f56 55%, #071e39 100%); }
 

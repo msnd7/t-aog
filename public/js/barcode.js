@@ -8,7 +8,7 @@ export function drawBarcode(svgElement, code, options = {}) {
       height: options.height || 70,
       displayValue: options.displayValue !== false,
       fontSize: options.fontSize || 16,
-      font: 'Segoe UI, Tahoma, sans-serif',
+      font: 'IBM Plex Sans Arabic, Segoe UI, Tahoma, sans-serif',
       textMargin: 2,
       margin: options.margin ?? 6,
       background: options.background || '#ffffff',

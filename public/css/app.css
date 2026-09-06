@@ -22,7 +22,7 @@
   --radius-sm: 12px;
   --shadow: 0 10px 30px rgba(20, 40, 80, .08);
   --shadow-sm: 0 4px 14px rgba(20, 40, 80, .06);
-  --font: "Segoe UI", "Noto Kufi Arabic", "Noto Naskh Arabic", "Dubai", Tahoma, system-ui, sans-serif;
+  --font: 'IBM Plex Sans Arabic', 'Segoe UI', 'Noto Kufi Arabic', Tahoma, system-ui, sans-serif;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
@@ -243,6 +243,78 @@ td.num, th.num { font-variant-numeric: tabular-nums; }
 .reward__img img { width: 100%; height: 100%; object-fit: cover; }
 .reward__body { padding: .8rem; display: flex; flex-direction: column; gap: .35rem; flex: 1; }
 .reward__price { font-weight: 800; color: var(--orange); }
+
+
+/* ---- بطاقة الطالب (الباركود) --------------------------------------------- */
+.id-card {
+  position: relative; isolation: isolate; overflow: hidden; color: #fff;
+  border-radius: 22px; padding: 1.05rem 1.15rem 1.15rem;
+  background: linear-gradient(135deg, #0e3c6b 0%, #17579a 48%, #0b2f56 100%);
+  box-shadow: 0 18px 38px rgba(11, 47, 86, .32);
+  max-width: 460px;
+}
+.id-card::before {
+  content: ''; position: absolute; inset: 0; z-index: -1; opacity: .14;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Cg fill='none' stroke='%23ffffff' stroke-width='1.2'%3E%3Cpath d='M32 3 61 32 32 61 3 32Z'/%3E%3Cpath d='M11 11h42v42H11z'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 64px 64px;
+}
+.id-card::after {
+  content: ''; position: absolute; z-index: -1; width: 260px; height: 260px; border-radius: 50%;
+  inset-inline-start: -90px; top: -130px;
+  background: radial-gradient(circle, rgba(246, 196, 69, .45), rgba(246, 196, 69, 0) 70%);
+}
+.id-card__head { display: flex; align-items: center; justify-content: space-between; gap: .6rem; }
+.id-card__brand { display: flex; align-items: center; gap: .5rem; font-weight: 600; font-size: .88rem; }
+.id-card__brand img { width: 36px; height: 36px; border-radius: 11px; background: #fff; padding: 3px; object-fit: contain; }
+.id-card__tag {
+  font-size: .72rem; font-weight: 600; letter-spacing: .5px; padding: .22rem .7rem; border-radius: 999px;
+  background: rgba(255, 255, 255, .18); border: 1px solid rgba(255, 255, 255, .25);
+}
+.id-card__body { display: flex; align-items: center; gap: .85rem; margin: 1rem 0 .9rem; }
+.id-card__photo {
+  width: 66px; height: 66px; border-radius: 50%; object-fit: cover; flex: 0 0 auto;
+  border: 3px solid var(--gold); background: #fff; color: var(--blue-dark);
+  display: grid; place-content: center; font-weight: 800; font-size: 1.4rem;
+}
+.id-card__id { min-width: 0; flex: 1; }
+.id-card__name, .id-card__meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.id-card__name { font-size: 1.2rem; font-weight: 700; line-height: 1.25; }
+.id-card__meta { font-size: .82rem; opacity: .85; }
+.id-card__points {
+  margin-inline-start: auto; text-align: center; padding: .4rem .75rem; border-radius: 14px;
+  background: rgba(255, 255, 255, .16); border: 1px solid rgba(255, 255, 255, .2); line-height: 1.2;
+}
+.id-card__points strong { display: block; font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.id-card__points span { font-size: .7rem; opacity: .85; }
+.id-card__scan { background: #fff; border-radius: 16px; padding: .7rem .85rem .5rem; text-align: center; }
+.id-card__scan svg { width: 100%; height: 60px; display: block; }
+.id-card__code {
+  margin-top: .25rem; color: var(--blue-dark); font-weight: 700; font-size: .92rem;
+  letter-spacing: 3px; font-variant-numeric: tabular-nums;
+}
+.id-card--compact { padding: .8rem .9rem .9rem; border-radius: 18px; }
+.id-card--compact .id-card__photo { width: 52px; height: 52px; font-size: 1.1rem; }
+.id-card--compact .id-card__name { font-size: 1rem; }
+
+/* وضع العرض للمسح: شاشة بيضاء وباركود كبير */
+.scan-mode {
+  position: fixed; inset: 0; z-index: 95; background: #fff; display: grid; place-items: center;
+  padding: 1.2rem; animation: pop .2s ease;
+}
+.scan-mode__inner { text-align: center; width: min(620px, 100%); }
+.scan-mode__close {
+  position: absolute; top: 1rem; inset-inline-end: 1rem; width: 42px; height: 42px; border-radius: 50%;
+  border: 1px solid var(--line); background: #fff; font-size: 1.1rem; cursor: pointer;
+}
+.scan-mode__name { font-size: 1.5rem; font-weight: 700; color: var(--ink); }
+.scan-mode__halaqa { color: var(--muted); margin-bottom: 1.2rem; }
+.scan-mode__panel { background: #fff; padding: .5rem; border-radius: 18px; }
+.scan-mode__panel svg { width: 100%; height: auto; }
+.scan-mode__code {
+  margin-top: .6rem; font-size: 1.2rem; font-weight: 700; letter-spacing: 6px; color: var(--blue-dark);
+  font-variant-numeric: tabular-nums;
+}
+.scan-mode__hint { color: var(--muted); font-size: .85rem; margin-top: 1rem; }
 
 /* ---- barcode ------------------------------------------------------------- */
 .barcode-box { background: #fff; border: 1px dashed var(--line); border-radius: var(--radius); padding: 1rem; text-align: center; }

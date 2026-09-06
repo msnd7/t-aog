@@ -1,7 +1,7 @@
 /** الصفحة الشخصية للطالب: نقاطه، باركوده، وصورته */
 import { api } from '../api.js';
 import { esc, num, nb, avatar, dateAr, emptyState, modal, ok, fail } from '../ui.js';
-import { renderBarcodes, drawBarcode } from '../barcode.js';
+import { studentCardMarkup, mountStudentCards, openScanMode } from '../student-card.js';
 import { changeMyCodeModal } from './settings.js';
 
 let mine = null;
@@ -13,10 +13,20 @@ export async function render({ state }) {
 
   return {
     title: `أهلاً ${student.name}`,
-    subtitle: `${student.halaqa_name || 'بدون حلقة'} · ${student.barcode}${student.phone ? ` · ${student.phone}` : ''}`,
+    subtitle: `${student.halaqa_name || 'بدون حلقة'} · ${student.barcode}`,
     actions: `<button class="btn btn--sm btn--ghost" data-change-code>🔑 تغيير رمز الدخول</button>`,
     html: `
       <div class="grid cols-2">
+        <div class="card">
+          <div class="card__head"><div><h2>بطاقتي</h2><p>اعرضها للمشرف ليمسح الباركود ويضيف نقاطك</p></div></div>
+          ${studentCardMarkup(student, {
+    logo: state.settings.logo || '/img/logo.jpg',
+    academy: state.settings.academy_name || 'رياض القرآن',
+    points: wallet.balance
+  })}
+          <button class="btn btn--block mt" data-scan-mode>🔍 عرض البطاقة للمسح</button>
+        </div>
+
         <div class="card center">
           <div style="display:flex;justify-content:center">${avatar(student, 'avatar--xl')}</div>
           <h2 class="mt" style="margin-bottom:0">${esc(student.name)}</h2>
@@ -27,12 +37,6 @@ export async function render({ state }) {
             <div class="stat stat--blue"><span class="stat__label">هذا الأسبوع</span><span class="stat__value">${num(data.week_points)}</span></div>
             <div class="stat stat--gold"><span class="stat__label">ترتيبي</span><span class="stat__value">${rank.rank || '—'}</span></div>
           </div>
-        </div>
-
-        <div class="card">
-          <div class="card__head"><div><h2>باركودي</h2><p>اعرضه للمشرف ليمسحه ويضيف نقاطك</p></div></div>
-          <div class="barcode-box"><svg data-barcode="${esc(student.barcode || '')}" data-height="100"></svg></div>
-          <button class="btn btn--block mt" data-fullscreen>🔍 عرض بالحجم الكامل</button>
         </div>
       </div>
 
@@ -53,21 +57,10 @@ export async function render({ state }) {
 }
 
 export function mount({ content, refresh }) {
-  renderBarcodes(content);
+  mountStudentCards(content);
   const student = mine.student;
 
-  content.querySelector('[data-fullscreen]').onclick = () => {
-    modal({
-      title: 'باركود الطالب',
-      render: () => `
-        <div class="center">
-          <h2>${esc(student.name)}</h2>
-          <div class="barcode-box"><svg id="big-barcode"></svg></div>
-          <p class="muted small">${esc(student.barcode)}</p>
-        </div>`,
-      onMount: (root) => drawBarcode(root.querySelector('#big-barcode'), student.barcode, { height: 140, width: 3 })
-    });
-  };
+  content.querySelector('[data-scan-mode]').onclick = () => openScanMode(student);
 
   content.querySelector('[data-photo]').onclick = () => {
     modal({

@@ -1,0 +1,23 @@
+# نسخة systemd لتشغيل المنصة على خادم خاص (VPS)
+# انسخه إلى /etc/systemd/system/riyad-quran.service
+[Unit]
+Description=منصة تحفيز طلاب رياض القرآن
+After=network.target
+
+[Service]
+Type=simple
+User=riyad
+WorkingDirectory=/srv/riyad-quran
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=DATA_DIR=/srv/riyad-quran/data
+Environment=COOKIE_SECURE=1
+Environment=TZ=Asia/Riyadh
+ExecStart=/usr/bin/node --disable-warning=ExperimentalWarning server/index.js
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

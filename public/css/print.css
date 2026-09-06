@@ -11,7 +11,7 @@
 * { box-sizing: border-box; }
 body {
   margin: 0; background: #eceae4; color: var(--ink);
-  font-family: "Segoe UI", "Noto Kufi Arabic", Tahoma, system-ui, sans-serif;
+  font-family: 'IBM Plex Sans Arabic', 'Segoe UI', 'Noto Kufi Arabic', Tahoma, system-ui, sans-serif;
 }
 
 .toolbar {

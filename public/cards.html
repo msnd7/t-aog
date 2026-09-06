@@ -3,19 +3,23 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>بطاقات الباركود — رياض القرآن</title>
+  <title>بطاقات الطلاب — رياض القرآن</title>
   <link rel="icon" href="/img/favicon.png">
+  <link rel="preload" href="/fonts/ibm-plex-sans-arabic-400-arabic.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/fonts/ibm-plex-sans-arabic-600-arabic.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/css/fonts.css">
   <link rel="stylesheet" href="/css/cards.css">
 </head>
 <body>
   <div class="toolbar no-print">
     <div id="info">جارِ التحميل…</div>
     <div class="actions">
+      <label class="switch"><input type="checkbox" id="guides" checked> إظهار خطوط القص</label>
       <button class="btn" id="print">🖨️ طباعة البطاقات</button>
       <button class="btn btn--ghost" onclick="window.close()">إغلاق</button>
     </div>
   </div>
-  <div class="cards" id="cards"></div>
+  <div class="sheet"><div class="grid cut-guides" id="cards"></div></div>
   <script src="/vendor/JsBarcode.code128.min.js"></script>
   <script type="module" src="/js/cards.js"></script>
 </body>

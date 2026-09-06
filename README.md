@@ -120,10 +120,19 @@ scripts/           بيانات تجريبية وتوليد أيقونات ال�
 
 ## النشر
 
+دليل التفعيل خطوة بخطوة في **[DEPLOY.md](DEPLOY.md)**: Fly.io أو Render أو خادم خاص أو Docker،
+مع الربط بـ GitHub لنشر كل تحديث تلقائياً.
+
 - الخادم لا يحتاج قاعدة بيانات خارجية؛ كل شيء داخل `data/app.db`. **خذ نسخة احتياطية من مجلد `data/` دورياً.**
 - خلف وكيل عكسي (Nginx/Caddy) مع HTTPS، شغّل الخادم بـ `COOKIE_SECURE=1` لتأمين ملف الجلسة.
-- متغيرات البيئة المدعومة: `PORT`، `DATA_DIR`، `ADMIN_PHONE`، `ADMIN_NAME`، `COOKIE_SECURE`.
+- متغيرات البيئة المدعومة: `PORT`، `DATA_DIR`، `ADMIN_PHONE`، `ADMIN_NAME`، `COOKIE_SECURE`، `TZ`.
+- ملفات جاهزة في المستودع: `Dockerfile` · `fly.toml` · `render.yaml` · `deploy/nginx.conf` · `deploy/riyad-quran.service`.
+
+## الخطوط والمكتبات
+
+- الخط: **IBM Plex Sans Arabic** (رخصة SIL OFL) مستضاف محلياً في `public/fonts/` ليعمل دون اتصال وبسرعة.
+- الباركود: [JsBarcode](https://github.com/lindell/JsBarcode) (MIT) مضمّنة في `public/vendor/`.
 
 ## الترخيص
 
-MIT — مكتبة توليد الباركود [JsBarcode](https://github.com/lindell/JsBarcode) (MIT) مضمّنة في `public/vendor/`.
+MIT

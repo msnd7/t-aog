@@ -1,13 +1,13 @@
 /** صفحة الطالب لدى المشرف: النقاط، الباركود، السجل والشيكات */
 import { api } from '../api.js';
 import { esc, num, nb, avatar, dateAr, emptyState, modal, formValues, ok, fail, confirmDialog } from '../ui.js';
-import { renderBarcodes } from '../barcode.js';
+import { studentCardMarkup, mountStudentCards, openScanMode } from '../student-card.js';
 import { awardPointsModal, printCards, printCheques } from './shared.js';
 import { chequeModal } from './students.js';
 
 let current = null;
 
-export async function render({ params }) {
+export async function render({ params, state }) {
   const id = Number(params[0]);
   const [data, halaqatRes] = await Promise.all([api.get(`/api/students/${id}`), api.get('/api/halaqat')]);
   current = { ...data, halaqat: halaqatRes.halaqat };
@@ -50,10 +50,17 @@ export async function render({ params }) {
 
         <div class="card">
           <div class="card__head">
-            <div><h2>باركود الطالب</h2><p>يُمسح من قِبل المشرف لإضافة النقاط</p></div>
-            <button class="btn btn--sm btn--ghost" data-print-card>🖨️ طباعة البطاقة</button>
+            <div><h2>بطاقة الطالب</h2><p>يُمسح الباركود لإضافة النقاط</p></div>
+            <div class="row">
+              <button class="btn btn--sm btn--ghost" data-scan-mode>🔍 عرض للمسح</button>
+              <button class="btn btn--sm btn--ghost" data-print-card>🖨️ طباعة البطاقة</button>
+            </div>
           </div>
-          <div class="barcode-box"><svg data-barcode="${esc(student.barcode || '')}" data-height="90"></svg></div>
+          ${studentCardMarkup(student, {
+        logo: state.settings.logo || '/img/logo.jpg',
+        academy: state.settings.academy_name || 'رياض القرآن',
+        points: wallet.balance
+      })}
         </div>
       </div>
 
@@ -94,8 +101,9 @@ export async function render({ params }) {
 }
 
 export function mount({ content, refresh }) {
-  renderBarcodes(content);
+  mountStudentCards(content);
   const student = current.student;
+  content.querySelector('[data-scan-mode]').onclick = () => openScanMode(student);
 
   document.querySelector('[data-award]').onclick = () => awardPointsModal({ students: [student], onDone: refresh });
   document.querySelector('[data-cheque]').onclick = () => chequeModal([student], refresh);

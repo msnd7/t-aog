@@ -1,0 +1,21 @@
+# نشر تلقائي على Fly.io عند كل تحديث للفرع الرئيسي.
+# يعمل فقط بعد إضافة السر FLY_API_TOKEN في إعدادات المستودع.
+name: نشر على Fly.io
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: نشر
+    runs-on: ubuntu-latest
+    if: ${{ vars.FLY_DEPLOY_ENABLED == 'true' }}
+    concurrency: deploy-fly
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
