@@ -1,0 +1,9 @@
+data/
+tests/
+deploy/
+scripts/
+.github/
+Dockerfile
+fly.toml
+render.yaml
+*.log

@@ -19,7 +19,8 @@ npm run icons        # توليد أيقونات التطبيق من public/img/
 بعد `npm start` افتح <http://localhost:3000>. أول تشغيل يُنشئ حساب مدير ويطبع بياناته
 في الطرفية (رقم الجوال `0500000000` والرمز المؤقت `1234` ما لم يُحدَّد `ADMIN_PHONE`).
 
-متغيرات البيئة: `PORT` · `DATA_DIR` · `ADMIN_PHONE` · `ADMIN_NAME` · `COOKIE_SECURE` · `TZ`.
+متغيرات البيئة: `PORT` · `DATA_DIR` · `ADMIN_PHONE` · `ADMIN_NAME` · `COOKIE_SECURE` · `TZ`
+· `TURSO_DATABASE_URL` و`TURSO_AUTH_TOKEN` (قاعدة libSQL بعيدة للاستضافات بلا قرص دائم).
 
 ## البنية
 
@@ -53,6 +54,10 @@ data/              قاعدة البيانات والصور المرفوعة (خ
 
 ## النشر
 
-التفاصيل في `DEPLOY.md`. جاهز: `Dockerfile` · `fly.toml` · `render.yaml` ·
-`deploy/install.sh` (خادم Linux بأمر واحد) · `app.js` (لاستضافات cPanel/Passenger).
-كل رفعة تشغّل اختبارات GitHub Actions تلقائياً.
+التفاصيل في `DEPLOY.md`. جاهز: `Dockerfile` · `fly.toml` · `render.yaml` · `vercel.json` ·
+`deploy/install.sh` (خادم Linux بأمر واحد) · `app.js` (لاستضافات cPanel/Passenger) ·
+`api/index.js` (مدخل Vercel). كل رفعة تشغّل اختبارات GitHub Actions تلقائياً.
+
+على الاستضافات بلا قرص دائم مثل Vercel: `server/db.js` يفتح قاعدة libSQL بعيدة عند ضبط
+`TURSO_DATABASE_URL`، ويسقط إلى مجلد النظام المؤقت إن تعذّرت الكتابة في `DATA_DIR`؛
+وفي الحالتين تُحفظ الصور المرفوعة داخل جدول `uploads` بدل القرص (`UPLOADS_IN_DB`).

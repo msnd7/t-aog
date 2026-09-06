@@ -1,23 +1,58 @@
 'use strict';
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
-const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
-fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 /**
- * محرّك SQLite: يُستخدم المدمج في Node 22.5+ (node:sqlite)، وإن كانت
- * الاستضافة تعمل بإصدار أقدم فتُستخدم حزمة better-sqlite3 إن كانت مثبّتة.
- * الواجهتان متطابقتان في ما تستخدمه المنصة (prepare / run / get / all / exec).
+ * مجلد البيانات: يُفضَّل قرص دائم. بعض الاستضافات (مثل Vercel) لا تسمح بالكتابة
+ * إلا في مجلد مؤقت، فيُستخدم عندها مجلد النظام المؤقت ويُرفع العلم writable = false
+ * ليُخزَّن المرفوع داخل قاعدة البيانات بدل القرص.
+ */
+function resolveDataDir() {
+  const wanted = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
+  try {
+    fs.mkdirSync(path.join(wanted, 'uploads'), { recursive: true });
+    fs.accessSync(wanted, fs.constants.W_OK);
+    return { dir: wanted, writable: true };
+  } catch {
+    const fallback = path.join(os.tmpdir(), 'riyad-quran-data');
+    try { fs.mkdirSync(path.join(fallback, 'uploads'), { recursive: true }); } catch { /* لا شيء */ }
+    return { dir: fallback, writable: false };
+  }
+}
+
+const dataDir = resolveDataDir();
+const DATA_DIR = dataDir.dir;
+const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
+
+const REMOTE_URL = process.env.TURSO_DATABASE_URL || process.env.LIBSQL_URL || '';
+const REMOTE_TOKEN = process.env.TURSO_AUTH_TOKEN || process.env.LIBSQL_AUTH_TOKEN || '';
+
+/**
+ * محرّك SQLite. الترتيب:
+ *   ١) قاعدة libSQL بعيدة (Turso) إن ضُبط TURSO_DATABASE_URL — لازمة للاستضافات
+ *      بلا قرص دائم مثل Vercel، لأن ملف قاعدة البيانات هناك يُمحى مع كل نشر.
+ *   ٢) node:sqlite المدمج في Node 22.5 فأحدث.
+ *   ٣) حزمة better-sqlite3 على إصدارات Node الأقدم.
+ * الواجهات الثلاث متطابقة في ما تستخدمه المنصة (prepare / run / get / all / exec).
  */
 function openDatabase(file) {
+  if (REMOTE_URL) {
+    let LibsqlDatabase;
+    try {
+      LibsqlDatabase = require('libsql');
+    } catch {
+      throw new Error('ضُبط TURSO_DATABASE_URL لكن حزمة libsql غير مثبّتة: npm install libsql');
+    }
+    return { db: wrapLibsql(new LibsqlDatabase(REMOTE_URL, { authToken: REMOTE_TOKEN })), remote: true };
+  }
   try {
     const { DatabaseSync } = require('node:sqlite');
-    if (DatabaseSync) return new DatabaseSync(file);
+    if (DatabaseSync) return { db: new DatabaseSync(file), remote: false };
   } catch { /* إصدار Node لا يوفّر node:sqlite */ }
   try {
     const BetterSqlite3 = require('better-sqlite3');
-    return new BetterSqlite3(file);
+    return { db: new BetterSqlite3(file), remote: false };
   } catch {
     throw new Error(
       'تعذّر تشغيل قاعدة البيانات: تحتاج Node.js 22.5 أو أحدث، '
@@ -26,9 +61,39 @@ function openDatabase(file) {
   }
 }
 
-const db = openDatabase(path.join(DATA_DIR, 'app.db'));
-db.exec('PRAGMA journal_mode = WAL');
-db.exec('PRAGMA foreign_keys = ON');
+/** سائق libsql يضيف الحقل _metadata إلى كل صف؛ يُنزع كي لا يظهر في ردود الواجهة. */
+function wrapLibsql(raw) {
+  const clean = (row) => {
+    if (row && typeof row === 'object') delete row._metadata;
+    return row;
+  };
+  return {
+    exec: (sql) => raw.exec(sql),
+    prepare: (sql) => {
+      const statement = raw.prepare(sql);
+      return {
+        run: (...args) => statement.run(...args),
+        get: (...args) => clean(statement.get(...args)),
+        all: (...args) => statement.all(...args).map(clean)
+      };
+    }
+  };
+}
+
+const opened = openDatabase(path.join(DATA_DIR, 'app.db'));
+const db = opened.db;
+const REMOTE_DB = opened.remote;
+
+/** الصور المرفوعة تُخزَّن في قاعدة البيانات متى كان القرص مؤقتاً أو القاعدة بعيدة. */
+const UPLOADS_IN_DB = REMOTE_DB || !dataDir.writable;
+
+/** أوامر PRAGMA غير مدعومة على القواعد البعيدة، فتُتجاوز بهدوء. */
+function tryExec(sql) {
+  try { db.exec(sql); } catch { /* غير مدعوم على هذا المحرّك */ }
+}
+
+tryExec('PRAGMA journal_mode = WAL');
+tryExec('PRAGMA foreign_keys = ON');
 
 const USERS_TABLE = `
 CREATE TABLE IF NOT EXISTS users (
@@ -52,8 +117,8 @@ CREATE TABLE IF NOT EXISTS users (
 function migrateUsersToPhoneLogin() {
   const table = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'users'").get();
   if (!table || !/username/.test(table.sql)) return;
-  db.exec('PRAGMA foreign_keys = OFF');
-  db.exec('PRAGMA legacy_alter_table = ON');
+  tryExec('PRAGMA foreign_keys = OFF');
+  tryExec('PRAGMA legacy_alter_table = ON');
   db.exec('ALTER TABLE users RENAME TO users_legacy');
   db.exec(USERS_TABLE);
   db.exec(`
@@ -64,8 +129,8 @@ function migrateUsersToPhoneLogin() {
       FROM users_legacy
   `);
   db.exec('DROP TABLE users_legacy');
-  db.exec('PRAGMA legacy_alter_table = OFF');
-  db.exec('PRAGMA foreign_keys = ON');
+  tryExec('PRAGMA legacy_alter_table = OFF');
+  tryExec('PRAGMA foreign_keys = ON');
   console.log('تمت ترقية الحسابات إلى الدخول برقم الجوال.');
 }
 
@@ -143,6 +208,15 @@ CREATE TABLE IF NOT EXISTS sessions (
   expires_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS uploads (
+  name       TEXT NOT NULL,
+  chunk      INTEGER NOT NULL,
+  mime       TEXT NOT NULL,
+  data       BLOB NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (name, chunk)
+);
+
 CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,
   value TEXT
@@ -186,4 +260,7 @@ function setSetting(key, value) {
     .run(key, String(value));
 }
 
-module.exports = { db, DATA_DIR, UPLOAD_DIR, getSettings, getSetting, setSetting, DEFAULT_SETTINGS };
+module.exports = {
+  db, DATA_DIR, UPLOAD_DIR, REMOTE_DB, UPLOADS_IN_DB,
+  getSettings, getSetting, setSetting, DEFAULT_SETTINGS
+};

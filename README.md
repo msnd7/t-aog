@@ -116,17 +116,23 @@ public/            الواجهة (RTL) — تطبيق صفحة واحدة بل�
   sw.js            عامل الخدمة (PWA)
 data/              قاعدة البيانات والصور المرفوعة (لا تُرفع إلى Git)
 scripts/           بيانات تجريبية وتوليد أيقونات التطبيق
+api/index.js       مدخل التشغيل على Vercel (دالة بلا خادم)
 ```
 
 ## النشر
 
-دليل التفعيل خطوة بخطوة في **[DEPLOY.md](DEPLOY.md)**: Fly.io أو Render أو خادم خاص أو Docker،
-مع الربط بـ GitHub لنشر كل تحديث تلقائياً.
+المستودع على GitHub: <https://github.com/msnd7/t-aog>. دليل التفعيل خطوة بخطوة في
+**[DEPLOY.md](DEPLOY.md)**: Fly.io أو Vercel أو Render أو خادم خاص أو Docker، وكلها تُربط
+بالمستودع لنشر كل تحديث تلقائياً.
 
 - الخادم لا يحتاج قاعدة بيانات خارجية؛ كل شيء داخل `data/app.db`. **خذ نسخة احتياطية من مجلد `data/` دورياً.**
+- على الاستضافات بلا قرص دائم (Vercel) اضبط قاعدة libSQL بعيدة بـ `TURSO_DATABASE_URL`،
+  وحينها تُحفظ الصور المرفوعة داخل قاعدة البيانات تلقائياً.
 - خلف وكيل عكسي (Nginx/Caddy) مع HTTPS، شغّل الخادم بـ `COOKIE_SECURE=1` لتأمين ملف الجلسة.
-- متغيرات البيئة المدعومة: `PORT`، `DATA_DIR`، `ADMIN_PHONE`، `ADMIN_NAME`، `COOKIE_SECURE`، `TZ`.
-- ملفات جاهزة في المستودع: `Dockerfile` · `fly.toml` · `render.yaml` · `deploy/nginx.conf` · `deploy/riyad-quran.service`.
+- متغيرات البيئة المدعومة: `PORT`، `DATA_DIR`، `ADMIN_PHONE`، `ADMIN_NAME`، `COOKIE_SECURE`، `TZ`،
+  و`TURSO_DATABASE_URL` مع `TURSO_AUTH_TOKEN`.
+- ملفات جاهزة في المستودع: `Dockerfile` · `fly.toml` · `render.yaml` · `vercel.json` · `api/index.js` ·
+  `deploy/nginx.conf` · `deploy/riyad-quran.service`.
 
 ## الخطوط والمكتبات
 

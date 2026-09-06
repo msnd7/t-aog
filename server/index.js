@@ -2,6 +2,7 @@
 const path = require('node:path');
 const express = require('express');
 const { db, DATA_DIR, UPLOAD_DIR, getSettings } = require('./db');
+const { readFromDatabase, UPLOADS_IN_DB } = require('./upload');
 const { attachUser, hashCode } = require('./auth');
 const { nowIso, normalizePhone, formatPhone } = require('./util');
 
@@ -14,6 +15,16 @@ app.use(express.urlencoded({ extended: false }));
 app.use(attachUser);
 
 // Uploaded photos (student pictures, reward pictures, custom logo).
+// على الاستضافات بلا قرص دائم تُحفظ الصور في قاعدة البيانات وتُقدَّم من هنا.
+if (UPLOADS_IN_DB) {
+  app.get('/uploads/:name', (req, res) => {
+    const file = readFromDatabase(req.params.name);
+    if (!file) return res.status(404).send('غير موجود');
+    res.setHeader('Content-Type', file.mime);
+    res.setHeader('Cache-Control', 'public, max-age=604800');
+    res.send(file.body);
+  });
+}
 app.use('/uploads', express.static(UPLOAD_DIR, { maxAge: '7d' }));
 
 app.use('/api/auth', require('./routes/auth'));
