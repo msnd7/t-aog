@@ -12,7 +12,7 @@ export async function render() {
   return {
     title: 'الإعدادات',
     subtitle: 'ضبط المنصة وقيم النقاط وحسابات المشرفين',
-    actions: `<button class="btn btn--sm btn--ghost" data-my-password>🔑 كلمة مروري</button>`,
+    actions: `<button class="btn btn--sm btn--ghost" data-my-code>🔑 تغيير رمزي</button>`,
     html: `
       <div class="grid cols-2">
         <div class="card">
@@ -32,6 +32,11 @@ export async function render() {
             <div class="inline-fields">
               <div class="field"><label>نقاط كل مسحة باركود</label><input name="scan_points" type="number" step="5" value="${esc(s.scan_points || 25)}"></div>
               <div class="field"><label>مهلة منع تكرار المسح (ثانية)</label><input name="scan_cooldown_seconds" type="number" value="${esc(s.scan_cooldown_seconds || 20)}"></div>
+            </div>
+            <div class="field">
+              <label>الرمز المؤقت للحسابات الجديدة</label>
+              <input name="default_code" inputmode="numeric" dir="ltr" pattern="\\d{4,6}" value="${esc(s.default_code || '1234')}">
+              <span class="hint">يدخل به الطالب أو المشرف أول مرة، ثم تظهر له شاشة تغيير الرمز إجبارياً.</span>
             </div>
             <div class="inline-fields">
               <div class="field"><label>مدة عرض كل شاشة (ثانية)</label><input name="screen_rotate_seconds" type="number" value="${esc(s.screen_rotate_seconds || 14)}"></div>
@@ -79,16 +84,18 @@ export async function render() {
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>الاسم</th><th>اسم المستخدم</th><th>الصلاحية</th><th>الحالة</th><th></th></tr></thead>
+            <thead><tr><th>الاسم</th><th>رقم الجوال</th><th>الصلاحية</th><th>الحالة</th><th></th></tr></thead>
             <tbody>
               ${cache.staff.map((user) => `
                 <tr>
                   <td>${esc(user.name)}</td>
-                  <td>${esc(user.username)}</td>
+                  <td dir="ltr" style="text-align:right">${esc(user.phone || '—')}</td>
                   <td>${user.role === 'admin' ? 'مدير المنصة' : 'مشرف'}</td>
-                  <td>${user.active ? '<span class="chip chip--green">نشط</span>' : '<span class="chip chip--gray">معطل</span>'}</td>
+                  <td>${user.active
+      ? (user.must_change_code ? '<span class="chip chip--orange">لم يغيّر الرمز</span>' : '<span class="chip chip--green">نشط</span>')
+      : '<span class="chip chip--gray">معطل</span>'}</td>
                   <td class="row" style="gap:.3rem">
-                    <button class="btn btn--sm btn--ghost" data-reset="${user.id}">كلمة المرور</button>
+                    <button class="btn btn--sm btn--ghost" data-reset="${user.id}">إعادة الرمز</button>
                     <button class="btn btn--sm btn--ghost" data-toggle="${user.id}" data-active="${user.active}">${user.active ? 'تعطيل' : 'تفعيل'}</button>
                   </td>
                 </tr>`).join('')}
@@ -120,7 +127,14 @@ export function mount({ content, refresh }) {
 
   content.querySelector('[data-add-staff]').onclick = () => staffModal(refresh);
   content.querySelectorAll('[data-reset]').forEach((button) => {
-    button.onclick = () => passwordModal(button.dataset.reset);
+    button.onclick = async () => {
+      if (!await confirmDialog('إعادة رمز هذا الحساب إلى الرمز المؤقت؟', { confirmText: 'إعادة الرمز', danger: false })) return;
+      try {
+        const result = await api.post(`/api/settings/staff/${button.dataset.reset}/reset-code`, {});
+        ok(`الرمز المؤقت الآن: ${result.code}`);
+        refresh();
+      } catch (error) { fail(error.message); }
+    };
   });
   content.querySelectorAll('[data-toggle]').forEach((button) => {
     button.onclick = async () => {
@@ -134,27 +148,7 @@ export function mount({ content, refresh }) {
     };
   });
 
-  document.querySelector('[data-my-password]').onclick = () => {
-    modal({
-      title: 'تغيير كلمة مروري',
-      render: () => `
-        <form id="mine-form">
-          <div class="field"><label>كلمة المرور الحالية</label><input type="password" name="current" required></div>
-          <div class="field"><label>كلمة المرور الجديدة</label><input type="password" name="next" required minlength="4"></div>
-          <button class="btn btn--block" type="submit">حفظ</button>
-        </form>`,
-      onMount: (root, close) => {
-        root.querySelector('#mine-form').onsubmit = async (event) => {
-          event.preventDefault();
-          try {
-            await api.post('/api/auth/password', formValues(event.target));
-            ok('تم تغيير كلمة المرور');
-            close();
-          } catch (error) { fail(error.message); }
-        };
-      }
-    });
-  };
+  document.querySelector('[data-my-code]').onclick = () => changeMyCodeModal();
 }
 
 function staffModal(onDone) {
@@ -163,20 +157,23 @@ function staffModal(onDone) {
     render: () => `
       <form id="staff-form">
         <div class="field"><label>الاسم</label><input name="name" required></div>
-        <div class="field"><label>اسم المستخدم</label><input name="username" required inputmode="latin"></div>
-        <div class="field"><label>كلمة المرور</label><input name="password" required minlength="4"></div>
+        <div class="field">
+          <label>رقم الجوال (للدخول)</label>
+          <input name="phone" inputmode="tel" dir="ltr" placeholder="05xxxxxxxx" required>
+        </div>
         <div class="field"><label>الصلاحية</label>
           <select name="role"><option value="supervisor">مشرف</option><option value="admin">مدير المنصة</option></select>
         </div>
-        <button class="btn btn--block" type="submit">إضافة</button>
+        <span class="hint">يدخل المشرف برقم جواله والرمز المؤقت، ثم يختار رمزه الخاص.</span>
+        <button class="btn btn--block mt" type="submit">إضافة</button>
       </form>`,
     onMount: (root, close) => {
       root.querySelector('#staff-form').onsubmit = async (event) => {
         event.preventDefault();
         try {
-          await api.post('/api/settings/staff', formValues(event.target));
-          ok('تم إنشاء الحساب');
+          const result = await api.post('/api/settings/staff', formValues(event.target));
           close();
+          ok(`تم إنشاء الحساب — الرمز المؤقت ${result.code}`);
           if (onDone) onDone();
         } catch (error) { fail(error.message); }
       };
@@ -184,21 +181,28 @@ function staffModal(onDone) {
   });
 }
 
-function passwordModal(id) {
+/** تغيير رمز الدخول للمستخدم الحالي */
+export function changeMyCodeModal(onDone) {
   modal({
-    title: 'كلمة مرور جديدة',
+    title: 'تغيير رمز الدخول',
     render: () => `
-      <form id="reset-form">
-        <div class="field"><label>كلمة المرور الجديدة</label><input name="password" required minlength="4"></div>
-        <button class="btn btn--block" type="submit">حفظ</button>
+      <form id="code-form">
+        <div class="field"><label>الرمز الحالي</label>
+          <input name="current" inputmode="numeric" dir="ltr" class="code-input" maxlength="6" required></div>
+        <div class="field"><label>الرمز الجديد</label>
+          <input name="next" inputmode="numeric" dir="ltr" class="code-input" maxlength="6" minlength="4" required></div>
+        <div class="field"><label>تأكيد الرمز الجديد</label>
+          <input name="confirm" inputmode="numeric" dir="ltr" class="code-input" maxlength="6" minlength="4" required></div>
+        <button class="btn btn--block" type="submit">حفظ الرمز</button>
       </form>`,
     onMount: (root, close) => {
-      root.querySelector('#reset-form').onsubmit = async (event) => {
+      root.querySelector('#code-form').onsubmit = async (event) => {
         event.preventDefault();
         try {
-          await api.patch(`/api/settings/staff/${id}`, formValues(event.target));
-          ok('تم تغيير كلمة المرور');
+          await api.post('/api/auth/code', formValues(event.target));
+          ok('تم تغيير رمز الدخول');
           close();
+          if (onDone) onDone();
         } catch (error) { fail(error.message); }
       };
     }

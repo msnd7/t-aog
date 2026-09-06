@@ -2,8 +2,8 @@
 const path = require('node:path');
 const express = require('express');
 const { db, DATA_DIR, UPLOAD_DIR, getSettings } = require('./db');
-const { attachUser, hashPassword } = require('./auth');
-const { nowIso } = require('./util');
+const { attachUser, hashCode } = require('./auth');
+const { nowIso, normalizePhone, formatPhone } = require('./util');
 
 const app = express();
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -48,17 +48,33 @@ app.use((err, req, res, next) => {
   res.status(status).json({ error: err.message || 'حدث خطأ غير متوقع' });
 });
 
-/** Creates the first administrator so a fresh install can be opened right away. */
+/**
+ * ينشئ حساب المدير الأول ليتمكن من تسجيل بقية المشرفين والطلاب.
+ * الدخول برقم الجوال والرمز المؤقت، ويُطلب تغيير الرمز عند أول دخول.
+ */
 function ensureAdmin() {
-  const existing = db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'admin'").get();
-  if (existing.n > 0) return;
-  const username = (process.env.ADMIN_USERNAME || 'admin').toLowerCase();
-  const password = process.env.ADMIN_PASSWORD || 'admin1234';
+  const settings = getSettings();
+  const code = settings.default_code || '1234';
+  const phone = normalizePhone(process.env.ADMIN_PHONE || '0500000000');
+  const existing = db.prepare("SELECT id, phone FROM users WHERE role = 'admin' ORDER BY id LIMIT 1").get();
+
+  if (existing) {
+    // حساب مدير قديم بلا رقم جوال (بعد الترقية): يُربط بالرقم المتاح
+    if (!existing.phone && phone && !db.prepare('SELECT 1 FROM users WHERE phone = ?').get(phone)) {
+      db.prepare('UPDATE users SET phone = ?, code_hash = ?, must_change_code = 1 WHERE id = ?')
+        .run(phone, hashCode(code), existing.id);
+      console.log(`\n  تم ربط حساب المدير برقم الجوال ${formatPhone(phone)} والرمز المؤقت ${code}\n`);
+    }
+    return;
+  }
+  if (db.prepare('SELECT 1 FROM users WHERE phone = ?').get(phone)) return;
+
   db.prepare(`
-    INSERT INTO users (username, password_hash, role, name, active, created_at) VALUES (?, ?, 'admin', ?, 1, ?)
-  `).run(username, hashPassword(password), process.env.ADMIN_NAME || 'مدير المنصة', nowIso());
-  console.log(`\n  تم إنشاء حساب المدير:  ${username} / ${password}`);
-  console.log('  غيّر كلمة المرور من صفحة الإعدادات بعد أول دخول.\n');
+    INSERT INTO users (phone, code_hash, must_change_code, role, name, active, created_at)
+    VALUES (?, ?, 1, 'admin', ?, 1, ?)
+  `).run(phone, hashCode(code), process.env.ADMIN_NAME || 'مدير المنصة', nowIso());
+  console.log(`\n  تم إنشاء حساب المدير:  رقم الجوال ${formatPhone(phone)} — الرمز المؤقت ${code}`);
+  console.log('  ستُطلب منك شاشة تغيير الرمز مباشرة بعد أول دخول.\n');
 }
 
 if (require.main === module) {

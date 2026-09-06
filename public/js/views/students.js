@@ -30,7 +30,7 @@ export async function render() {
               <option value="">كل الحلقات</option>
               ${data.halaqat.map((h) => `<option value="${h.id}" ${String(view.halaqa) === String(h.id) ? 'selected' : ''}>${esc(h.name)}</option>`).join('')}
             </select>
-            <input data-search value="${esc(view.query)}" placeholder="بحث بالاسم أو الباركود"
+            <input data-search value="${esc(view.query)}" placeholder="بحث بالاسم أو الجوال أو الباركود"
                    style="min-height:40px;border-radius:12px;border:1px solid var(--line);padding:0 .7rem">
           </div>
         </div>
@@ -51,6 +51,7 @@ export async function render() {
                 <th style="width:40px"></th>
                 <th style="width:44px">#</th>
                 <th>الطالب</th>
+                <th>رقم الجوال</th>
                 <th>الحلقة</th>
                 <th class="num">نقاط الفترة</th>
                 <th class="num">الرصيد</th>
@@ -60,7 +61,7 @@ export async function render() {
             </thead>
             <tbody>
               ${data.students.map((student) => `
-                <tr data-row="${student.id}" data-name="${esc(student.name)} ${esc(student.barcode || '')}">
+                <tr data-row="${student.id}" data-name="${esc(student.name)} ${esc(student.barcode || '')} ${esc(student.phone || '')}">
                   <td><input type="checkbox" data-pick="${student.id}" ${selected.has(student.id) ? 'checked' : ''}></td>
                   <td>${rankBadge(student.rank)}</td>
                   <td>
@@ -69,6 +70,7 @@ export async function render() {
                       <span><strong>${esc(student.name)}</strong><span>${esc(student.barcode || '')}</span></span>
                     </a>
                   </td>
+                  <td dir="ltr" style="text-align:right">${esc(student.phone || '—')}</td>
                   <td>${esc(student.halaqa_name || '—')}</td>
                   <td class="num"><span class="points-pill">${num(student.period_points)}</span></td>
                   <td class="num">${num(student.balance)}</td>
@@ -260,15 +262,10 @@ function addStudentModal(halaqat, onDone) {
             ${halaqat.map((h) => `<option value="${h.id}">${esc(h.name)}</option>`).join('')}
           </select>
         </div>
-        <div class="inline-fields">
-          <div class="field">
-            <label>اسم المستخدم (اختياري)</label>
-            <input name="username" placeholder="يُنشأ تلقائياً من الباركود">
-          </div>
-          <div class="field">
-            <label>كلمة المرور (اختياري)</label>
-            <input name="password" placeholder="الافتراضي: رقم الباركود">
-          </div>
+        <div class="field">
+          <label>رقم الجوال (للدخول)</label>
+          <input name="phone" inputmode="tel" dir="ltr" placeholder="05xxxxxxxx">
+          <span class="hint">يدخل الطالب برقم جواله والرمز المؤقت، ثم تظهر له شاشة تغيير الرمز.</span>
         </div>
         <button class="btn btn--block" type="submit">إضافة الطالب</button>
       </form>`,
@@ -283,9 +280,9 @@ function addStudentModal(halaqat, onDone) {
             render: () => `
               <p>تم إنشاء حساب الطالب <strong>${esc(student.name)}</strong>.</p>
               <div class="card">
-                <p>الباركود: <strong>${esc(student.barcode)}</strong></p>
-                <p>اسم المستخدم: <strong>${esc(student.username)}</strong></p>
-                <p>كلمة المرور: <strong>${esc(student.password)}</strong></p>
+                <p>الباركود: <strong dir="ltr">${esc(student.barcode)}</strong></p>
+                <p>رقم الجوال للدخول: <strong dir="ltr">${esc(student.phone || 'لم يُسجَّل')}</strong></p>
+                <p>الرمز المؤقت: <strong dir="ltr">${esc(student.code)}</strong> — يُطلب تغييره عند أول دخول</p>
               </div>
               <div class="barcode-box"><svg data-barcode="${esc(student.barcode)}"></svg></div>`,
             onMount: async (box) => {
@@ -314,8 +311,8 @@ function bulkModal(halaqat, onDone) {
         </div>
         <div class="field">
           <label>أسماء الطلاب</label>
-          <textarea name="names" placeholder="اسم في كل سطر" required></textarea>
-          <span class="hint">يُنشأ لكل طالب باركود وحساب دخول تلقائياً.</span>
+          <textarea name="names" placeholder="عبدالرحمن الأحمد, 0501234567&#10;محمد العتيبي, 0559876543" required></textarea>
+          <span class="hint">سطر لكل طالب: الاسم ثم فاصلة ثم رقم الجوال (الرقم اختياري). يُنشأ الباركود والرمز المؤقت تلقائياً.</span>
         </div>
         <button class="btn btn--block" type="submit">إضافة</button>
       </form>`,
@@ -326,6 +323,9 @@ function bulkModal(halaqat, onDone) {
           const result = await api.post('/api/students/bulk', formValues(event.target));
           ok(`تمت إضافة ${result.count} طالباً`);
           close();
+          if (result.skipped && result.skipped.length) {
+            fail(`تم تجاوز ${result.skipped.length} سطراً: ${result.skipped[0].reason}`);
+          }
           if (await confirmDialog('هل تريد طباعة بطاقات الباركود للطلاب الجدد؟', { confirmText: 'طباعة', danger: false })) {
             printCards({ studentIds: result.created.map((s) => s.id) });
           }

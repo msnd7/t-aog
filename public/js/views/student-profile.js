@@ -15,7 +15,7 @@ export async function render({ params }) {
 
   return {
     title: student.name,
-    subtitle: `${student.halaqa_name || 'بدون حلقة'} · ${student.barcode || ''}`,
+    subtitle: `${student.halaqa_name || 'بدون حلقة'} · ${student.barcode || ''}${student.phone ? ` · ${student.phone}` : ''}`,
     actions: `
       <button class="btn btn--sm btn--green" data-award>➕ نقاط</button>
       <button class="btn btn--sm" data-cheque>🧾 شيك</button>
@@ -40,9 +40,10 @@ export async function render({ params }) {
             <div class="stat stat--orange"><span class="stat__label">المستبدل</span><span class="stat__value">${num(wallet.spent)}</span></div>
           </div>
           <div class="row mt">
-            <span class="muted small">اسم المستخدم: <strong>${esc(student.username)}</strong></span>
+            <span class="muted small">رقم الجوال للدخول: <strong dir="ltr">${esc(student.phone || 'لم يُسجَّل')}</strong></span>
+            ${student.must_change_code ? '<span class="chip chip--orange">لم يغيّر الرمز المؤقت بعد</span>' : ''}
             <span class="spacer"></span>
-            <button class="btn btn--sm btn--ghost" data-password>🔑 تغيير كلمة المرور</button>
+            <button class="btn btn--sm btn--ghost" data-reset-code>🔑 إعادة الرمز المؤقت</button>
             <button class="btn btn--sm btn--ghost" data-photo>🖼️ تغيير الصورة</button>
           </div>
         </div>
@@ -101,7 +102,15 @@ export function mount({ content, refresh }) {
   document.querySelector('[data-edit]').onclick = () => editModal(student, current.halaqat, refresh);
   content.querySelector('[data-print-card]').onclick = () => printCards({ studentIds: [student.id] });
   content.querySelector('[data-photo]').onclick = () => photoModal(student, refresh);
-  content.querySelector('[data-password]').onclick = () => passwordModal(student);
+  content.querySelector('[data-reset-code]').onclick = async () => {
+    if (!await confirmDialog(`إعادة رمز ${student.name} إلى الرمز المؤقت؟ سيُطلب منه اختيار رمز جديد عند الدخول.`,
+      { confirmText: 'إعادة الرمز', danger: false })) return;
+    try {
+      const result = await api.post(`/api/students/${student.id}/reset-code`, {});
+      ok(`الرمز المؤقت الآن: ${result.code}`);
+      refresh();
+    } catch (error) { fail(error.message); }
+  };
 
   content.querySelectorAll('[data-print-cheque]').forEach((button) => {
     button.onclick = () => printCheques([Number(button.dataset.printCheque)]);
@@ -131,7 +140,10 @@ function editModal(student, halaqat, onDone) {
             ${halaqat.map((h) => `<option value="${h.id}" ${h.id === student.halaqa_id ? 'selected' : ''}>${esc(h.name)}</option>`).join('')}
           </select>
         </div>
-        <div class="field"><label>اسم المستخدم</label><input name="username" value="${esc(student.username)}"></div>
+        <div class="field">
+          <label>رقم الجوال (للدخول)</label>
+          <input name="phone" inputmode="tel" dir="ltr" value="${esc(student.phone || '')}" placeholder="05xxxxxxxx">
+        </div>
         <button class="btn btn--block" type="submit">حفظ</button>
       </form>`,
     onMount: (root, close) => {
@@ -142,27 +154,6 @@ function editModal(student, halaqat, onDone) {
           ok('تم الحفظ');
           close();
           if (onDone) onDone();
-        } catch (error) { fail(error.message); }
-      };
-    }
-  });
-}
-
-function passwordModal(student) {
-  modal({
-    title: 'تغيير كلمة مرور الطالب',
-    render: () => `
-      <form id="pass-form">
-        <div class="field"><label>كلمة المرور الجديدة</label><input name="password" required minlength="4"></div>
-        <button class="btn btn--block" type="submit">حفظ</button>
-      </form>`,
-    onMount: (root, close) => {
-      root.querySelector('#pass-form').onsubmit = async (event) => {
-        event.preventDefault();
-        try {
-          await api.patch(`/api/students/${student.id}`, formValues(event.target));
-          ok('تم تغيير كلمة المرور');
-          close();
         } catch (error) { fail(error.message); }
       };
     }

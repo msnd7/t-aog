@@ -11,6 +11,47 @@ const db = new DatabaseSync(path.join(DATA_DIR, 'app.db'));
 db.exec('PRAGMA journal_mode = WAL');
 db.exec('PRAGMA foreign_keys = ON');
 
+const USERS_TABLE = `
+CREATE TABLE IF NOT EXISTS users (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  phone            TEXT UNIQUE,
+  code_hash        TEXT NOT NULL,
+  must_change_code INTEGER NOT NULL DEFAULT 1,
+  role             TEXT NOT NULL CHECK (role IN ('admin','supervisor','student')),
+  name             TEXT NOT NULL,
+  halaqa_id        INTEGER REFERENCES halaqat(id) ON DELETE SET NULL,
+  photo            TEXT,
+  barcode          TEXT UNIQUE,
+  active           INTEGER NOT NULL DEFAULT 1,
+  created_at       TEXT NOT NULL
+);`;
+
+/**
+ * ترقية قواعد البيانات القديمة: كان الدخول باسم مستخدم وكلمة مرور،
+ * وأصبح برقم الجوال ورمز مؤقت. تُنقل الحسابات القائمة كما هي.
+ */
+function migrateUsersToPhoneLogin() {
+  const table = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'users'").get();
+  if (!table || !/username/.test(table.sql)) return;
+  db.exec('PRAGMA foreign_keys = OFF');
+  db.exec('PRAGMA legacy_alter_table = ON');
+  db.exec('ALTER TABLE users RENAME TO users_legacy');
+  db.exec(USERS_TABLE);
+  db.exec(`
+    INSERT INTO users (id, phone, code_hash, must_change_code, role, name, halaqa_id, photo, barcode, active, created_at)
+    SELECT id,
+           CASE WHEN username GLOB '0[0-9]*' THEN username ELSE NULL END,
+           password_hash, 1, role, name, halaqa_id, photo, barcode, active, created_at
+      FROM users_legacy
+  `);
+  db.exec('DROP TABLE users_legacy');
+  db.exec('PRAGMA legacy_alter_table = OFF');
+  db.exec('PRAGMA foreign_keys = ON');
+  console.log('تمت ترقية الحسابات إلى الدخول برقم الجوال.');
+}
+
+migrateUsersToPhoneLogin();
+
 db.exec(`
 CREATE TABLE IF NOT EXISTS halaqat (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -21,18 +62,7 @@ CREATE TABLE IF NOT EXISTS halaqat (
   created_at    TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS users (
-  id            INTEGER PRIMARY KEY AUTOINCREMENT,
-  username      TEXT NOT NULL UNIQUE,
-  password_hash TEXT NOT NULL,
-  role          TEXT NOT NULL CHECK (role IN ('admin','supervisor','student')),
-  name          TEXT NOT NULL,
-  halaqa_id     INTEGER REFERENCES halaqat(id) ON DELETE SET NULL,
-  photo         TEXT,
-  barcode       TEXT UNIQUE,
-  active        INTEGER NOT NULL DEFAULT 1,
-  created_at    TEXT NOT NULL
-);
+${USERS_TABLE}
 
 CREATE TABLE IF NOT EXISTS cheques (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -114,7 +144,8 @@ const DEFAULT_SETTINGS = {
   cheque_recitation_both: '50',
   cheque_discipline: '25',
   screen_rotate_seconds: '14',
-  allow_student_photo_upload: '1'
+  allow_student_photo_upload: '1',
+  default_code: '1234'
 };
 
 const insertSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');

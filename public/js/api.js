@@ -25,7 +25,7 @@ export const api = {
   del: (path) => request(path, { method: 'DELETE' }),
   upload: (path, form, method = 'POST') => request(path, { method, form }),
 
-  login: (username, password) => request('/api/auth/login', { method: 'POST', body: { username, password } }),
+  login: (phone, code) => request('/api/auth/login', { method: 'POST', body: { phone, code } }),
   logout: () => request('/api/auth/logout', { method: 'POST' }),
   me: () => request('/api/auth/me')
 };

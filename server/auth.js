@@ -6,17 +6,18 @@ const { nowIso, randomToken } = require('./util');
 const SESSION_DAYS = 60;
 const COOKIE = 'rq_session';
 
-function hashPassword(password) {
+/** تشفير رمز الدخول (الرمز رقمي قصير، لذلك يُخزَّن مشفراً بـ scrypt) */
+function hashCode(code) {
   const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.scryptSync(String(password), salt, 64).toString('hex');
+  const hash = crypto.scryptSync(String(code), salt, 64).toString('hex');
   return `scrypt$${salt}$${hash}`;
 }
 
-function verifyPassword(password, stored) {
+function verifyCode(code, stored) {
   if (typeof stored !== 'string') return false;
   const [scheme, salt, hash] = stored.split('$');
   if (scheme !== 'scrypt' || !salt || !hash) return false;
-  const candidate = crypto.scryptSync(String(password), salt, 64);
+  const candidate = crypto.scryptSync(String(code), salt, 64);
   const expected = Buffer.from(hash, 'hex');
   return candidate.length === expected.length && crypto.timingSafeEqual(candidate, expected);
 }
@@ -37,12 +38,13 @@ function publicUser(user) {
   if (!user) return null;
   return {
     id: user.id,
-    username: user.username,
+    phone: user.phone,
     role: user.role,
     name: user.name,
     halaqa_id: user.halaqa_id,
     photo: user.photo,
-    barcode: user.barcode
+    barcode: user.barcode,
+    must_change_code: user.must_change_code === 1
   };
 }
 
@@ -71,14 +73,25 @@ function attachUser(req, res, next) {
   next();
 }
 
+/** يمنع استخدام المنصة قبل استبدال الرمز المؤقت */
+function blockUntilCodeChanged(req, res) {
+  if (req.user && req.user.must_change_code === 1) {
+    res.status(403).json({ error: 'يجب تغيير الرمز المؤقت أولاً', code_change_required: true });
+    return true;
+  }
+  return false;
+}
+
 function requireAuth(req, res, next) {
   if (!req.user) return res.status(401).json({ error: 'يجب تسجيل الدخول' });
+  if (blockUntilCodeChanged(req, res)) return;
   next();
 }
 
 /** Guard for routes reserved to supervisors and administrators. */
 function requireStaff(req, res, next) {
   if (!req.user) return res.status(401).json({ error: 'يجب تسجيل الدخول' });
+  if (blockUntilCodeChanged(req, res)) return;
   if (req.user.role !== 'admin' && req.user.role !== 'supervisor') {
     return res.status(403).json({ error: 'هذه الصفحة مخصصة للمشرفين' });
   }
@@ -87,6 +100,7 @@ function requireStaff(req, res, next) {
 
 function requireAdmin(req, res, next) {
   if (!req.user) return res.status(401).json({ error: 'يجب تسجيل الدخول' });
+  if (blockUntilCodeChanged(req, res)) return;
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'هذه الصلاحية لمدير المنصة فقط' });
   next();
 }
@@ -102,6 +116,6 @@ function clearSessionCookie(res) {
 }
 
 module.exports = {
-  COOKIE, hashPassword, verifyPassword, createSession, destroySession, publicUser,
+  COOKIE, hashCode, verifyCode, createSession, destroySession, publicUser,
   attachUser, requireAuth, requireStaff, requireAdmin, setSessionCookie, clearSessionCookie
 };

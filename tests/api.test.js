@@ -8,7 +8,7 @@ const path = require('node:path');
 // قاعدة بيانات مؤقتة لكل تشغيل للاختبارات
 const DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'riyad-test-'));
 process.env.DATA_DIR = DATA_DIR;
-process.env.ADMIN_PASSWORD = 'test1234';
+process.env.ADMIN_PHONE = '0500000001';
 
 const { app, ensureAdmin } = require('../server/index');
 ensureAdmin();
@@ -49,12 +49,40 @@ test('يمنع الوصول قبل تسجيل الدخول', async () => {
   assert.equal(res.status, 401);
 });
 
-test('تسجيل دخول المدير', async () => {
-  const bad = await call('POST', '/api/auth/login', { username: 'admin', password: 'wrong' });
+test('الدخول برقم الجوال والرمز المؤقت ثم إلزام تغيير الرمز', async () => {
+  const unknown = await call('POST', '/api/auth/check-phone', { phone: '0555555555' });
+  assert.equal(unknown.status, 404);
+
+  const known = await call('POST', '/api/auth/check-phone', { phone: '+966500000001' });
+  assert.equal(known.status, 200);
+  assert.equal(known.body.phone, '0500000001');
+
+  const bad = await call('POST', '/api/auth/login', { phone: '0500000001', code: '9999' });
   assert.equal(bad.status, 401);
-  const res = await call('POST', '/api/auth/login', { username: 'admin', password: 'test1234' });
+
+  const res = await call('POST', '/api/auth/login', { phone: '٠٥٠٠٠٠٠٠٠١', code: '1234' });
   assert.equal(res.status, 200);
   assert.equal(res.body.user.role, 'admin');
+  assert.equal(res.body.user.must_change_code, true);
+
+  // قبل تغيير الرمز لا تُفتح بقية الشاشات
+  const blocked = await call('GET', '/api/students');
+  assert.equal(blocked.status, 403);
+  assert.equal(blocked.body.code_change_required, true);
+
+  const sameCode = await call('POST', '/api/auth/code', { current: '1234', next: '1234' });
+  assert.equal(sameCode.status, 400);
+  const mismatch = await call('POST', '/api/auth/code', { current: '1234', next: '4321', confirm: '1111' });
+  assert.equal(mismatch.status, 400);
+  const wrongCurrent = await call('POST', '/api/auth/code', { current: '0000', next: '4321', confirm: '4321' });
+  assert.equal(wrongCurrent.status, 400);
+
+  const changed = await call('POST', '/api/auth/code', { current: '1234', next: '4321', confirm: '4321' });
+  assert.equal(changed.status, 200);
+  assert.equal(changed.body.user.must_change_code, false);
+
+  const allowed = await call('GET', '/api/students');
+  assert.equal(allowed.status, 200);
 });
 
 let halaqaId;
@@ -66,11 +94,21 @@ test('إنشاء حلقة وطالب مع باركود', async () => {
   assert.equal(halaqa.status, 201);
   halaqaId = halaqa.body.halaqa.id;
 
-  const student = await call('POST', '/api/students', { name: 'طالب تجريبي', halaqa_id: halaqaId });
+  const student = await call('POST', '/api/students', {
+    name: 'طالب تجريبي', halaqa_id: halaqaId, phone: '0512345678'
+  });
   assert.equal(student.status, 201);
   studentId = student.body.student.id;
   barcode = student.body.student.barcode;
   assert.match(barcode, /^RQ\d{5}$/);
+  assert.equal(student.body.student.phone, '0512345678');
+  assert.equal(student.body.student.code, '1234');
+
+  const duplicate = await call('POST', '/api/students', { name: 'مكرر', phone: '0512345678' });
+  assert.equal(duplicate.status, 409);
+
+  const badPhone = await call('POST', '/api/students', { name: 'رقم خاطئ', phone: '12' });
+  assert.equal(badPhone.status, 400);
 });
 
 test('مسح الباركود يضيف 25 نقطة ويمنع التكرار الفوري', async () => {
@@ -153,16 +191,18 @@ test('المتجر: الاستبدال يخصم النقاط والرفض يعي
   assert.equal(after.body.wallet.balance, before.body.wallet.balance);
 });
 
-test('الطالب يرى صفحته فقط', async () => {
-  await call('PATCH', `/api/students/${studentId}`, { password: 'student1' });
+test('الطالب يدخل برقم جواله ولا يرى غير صفحته', async () => {
   const other = await call('POST', '/api/students', { name: 'طالب آخر', halaqa_id: halaqaId });
   const otherId = other.body.student.id;
-  const username = (await call('GET', `/api/students/${studentId}`)).body.student.username;
 
   cookie = '';
-  const login = await call('POST', '/api/auth/login', { username, password: 'student1' });
+  const login = await call('POST', '/api/auth/login', { phone: '0512345678', code: '1234' });
   assert.equal(login.status, 200);
   assert.equal(login.body.user.role, 'student');
+  assert.equal(login.body.user.must_change_code, true);
+
+  const changed = await call('POST', '/api/auth/code', { current: '1234', next: '2580', confirm: '2580' });
+  assert.equal(changed.status, 200);
 
   const mine = await call('GET', `/api/students/${studentId}`);
   assert.equal(mine.status, 200);
@@ -170,6 +210,28 @@ test('الطالب يرى صفحته فقط', async () => {
   assert.equal(forbidden.status, 403);
   const staffOnly = await call('POST', '/api/points', { student_id: studentId, points: 500 });
   assert.equal(staffOnly.status, 403);
+});
+
+test('إعادة تعيين رمز الطالب تعيده للرمز المؤقت', async () => {
+  cookie = '';
+  await call('POST', '/api/auth/login', { phone: '0500000001', code: '4321' });
+  const reset = await call('POST', `/api/students/${studentId}/reset-code`);
+  assert.equal(reset.status, 200);
+  assert.equal(reset.body.code, '1234');
+
+  cookie = '';
+  const relogin = await call('POST', '/api/auth/login', { phone: '0512345678', code: '1234' });
+  assert.equal(relogin.status, 200);
+  assert.equal(relogin.body.user.must_change_code, true);
+});
+
+test('توحيد صيغة أرقام الجوال', () => {
+  const { normalizePhone } = require('../server/util');
+  assert.equal(normalizePhone('+966 50 123 4567'), '0501234567');
+  assert.equal(normalizePhone('٠٥٠١٢٣٤٥٦٧'), '0501234567');
+  assert.equal(normalizePhone('501234567'), '0501234567');
+  assert.equal(normalizePhone('05123'), null);
+  assert.equal(normalizePhone('غير رقم'), null);
 });
 
 test('تفقيط المبالغ بالعربية', () => {

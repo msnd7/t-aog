@@ -104,9 +104,38 @@ function tafqit(amount, currency = 'ريال') {
   return `${parts.join(' و')} ${currency} فقط لا غير`;
 }
 
+/**
+ * توحيد صيغة رقم الجوال: يقبل 05xxxxxxxx و 9665xxxxxxx و +9665xxxxxxx
+ * ويعيدها جميعاً بالصيغة المحلية 05xxxxxxxx. يعيد null إذا كان الرقم غير صالح.
+ */
+function normalizePhone(value) {
+  const arabicDigits = String(value ?? '')
+    .replace(/[\u0660-\u0669]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[\u06F0-\u06F9]/g, (d) => String(d.charCodeAt(0) - 0x06F0));
+  let digits = arabicDigits.replace(/\D/g, '');
+  if (digits.startsWith('00966')) digits = digits.slice(5);
+  else if (digits.startsWith('966')) digits = digits.slice(3);
+  if (digits.length === 9 && digits.startsWith('5')) digits = `0${digits}`;
+  if (/^05\d{8}$/.test(digits)) return digits;
+  // رقم محلي يبدأ بصفر لكنه ليس بطول عشرة أرقام: غير صالح
+  if (digits.startsWith('0')) return null;
+  // أرقام غير سعودية: تُقبل كما هي إذا كانت بطول معقول
+  if (/^\d{7,15}$/.test(digits)) return digits;
+  return null;
+}
+
+/** صيغة عرض مريحة للقراءة: 05x xxx xxxx */
+function formatPhone(phone) {
+  const value = String(phone || '');
+  return /^05\d{8}$/.test(value) ? `${value.slice(0, 3)} ${value.slice(3, 6)} ${value.slice(6)}` : value;
+}
+
 const toInt = (value, fallback = 0) => {
   const n = Number.parseInt(value, 10);
   return Number.isFinite(n) ? n : fallback;
 };
 
-module.exports = { nowIso, startOfDay, weekBounds, monthBounds, rangeFor, randomToken, makeBarcode, chequeSerial, tafqit, toInt };
+module.exports = {
+  nowIso, startOfDay, weekBounds, monthBounds, rangeFor, randomToken, makeBarcode,
+  chequeSerial, tafqit, toInt, normalizePhone, formatPhone
+};

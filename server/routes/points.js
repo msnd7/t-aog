@@ -86,8 +86,8 @@ router.post('/scan', requireStaff, (req, res) => {
   const settings = getSettings();
   const student = db.prepare(`
     SELECT u.*, h.name AS halaqa_name FROM users u LEFT JOIN halaqat h ON h.id = u.halaqa_id
-     WHERE (upper(u.barcode) = ? OR upper(u.username) = ?) AND u.role = 'student' AND u.active = 1
-  `).get(code, code);
+     WHERE upper(u.barcode) = ? AND u.role = 'student' AND u.active = 1
+  `).get(code);
   if (!student) return res.status(404).json({ error: `لا يوجد طالب بالباركود ${code}` });
 
   const cooldown = toInt(settings.scan_cooldown_seconds, 20);

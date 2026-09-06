@@ -285,6 +285,13 @@ td.num, th.num { font-variant-numeric: tabular-nums; }
 .login__card img { width: 130px; height: 130px; object-fit: contain; margin-bottom: .4rem; }
 .login__card form { text-align: right; margin-top: 1rem; }
 
+/* ---- login inputs (رقم الجوال ورمز الدخول) ------------------------------- */
+.code-input {
+  text-align: center; font-size: 1.35rem; font-weight: 700; letter-spacing: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.login__card .hint { display: block; text-align: center; }
+
 /* ---- scan page ----------------------------------------------------------- */
 .scan-stage {
   border: 2px dashed var(--blue); border-radius: var(--radius); background: var(--blue-soft);

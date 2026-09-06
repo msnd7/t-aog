@@ -59,6 +59,10 @@ function currentPath() {
 
 // ---- login ---------------------------------------------------------------
 
+// الرمز الذي استُخدم في آخر دخول، حتى لا يُطلب من المستخدم إعادة كتابته
+// في شاشة تغيير الرمز الإجبارية.
+let lastUsedCode = null;
+
 function loginScreen() {
   const root = document.getElementById('root');
   root.innerHTML = `
@@ -67,37 +71,147 @@ function loginScreen() {
         <img src="${esc(state.settings.logo || '/img/logo.jpg')}" alt="شعار المجمع">
         <h1 style="font-size:1.25rem">${esc(state.settings.academy_name || 'مجمع رياض القرآن التعليمي')}</h1>
         <p class="muted small">${esc(state.settings.academy_subtitle || '')}</p>
-        <form id="login-form">
+
+        <form id="phone-form" class="mt">
           <div class="field">
-            <label for="username">اسم المستخدم</label>
-            <input id="username" name="username" autocomplete="username" required inputmode="latin" placeholder="مثال: RQ00012">
+            <label for="phone">رقم الجوال</label>
+            <input id="phone" name="phone" inputmode="tel" autocomplete="tel" dir="ltr"
+                   class="code-input" placeholder="05xxxxxxxx" required>
+            <span class="hint">سجّل الدخول برقم جوالك المسجَّل لدى المشرف.</span>
           </div>
+          <button class="btn btn--block" type="submit">التالي</button>
+        </form>
+
+        <form id="code-form" class="mt" hidden>
+          <p class="muted small" id="welcome"></p>
           <div class="field">
-            <label for="password">كلمة المرور</label>
-            <input id="password" name="password" type="password" autocomplete="current-password" required>
+            <label for="code">رمز الدخول</label>
+            <input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" dir="ltr"
+                   class="code-input" maxlength="6" placeholder="••••" required>
+            <span class="hint">الرمز المؤقت لأول دخول هو <b dir="ltr">${esc(state.settings.default_code || '1234')}</b> ثم تُطلب منك شاشة تغييره.</span>
           </div>
           <button class="btn btn--block" type="submit">دخول</button>
+          <button class="btn btn--ghost btn--block mt" type="button" id="back">تغيير رقم الجوال</button>
         </form>
+
         <div class="divider"></div>
         <a class="btn btn--ghost btn--block" href="/screen.html">📺 فتح شاشة العرض</a>
       </div>
     </div>`;
-  const form = root.querySelector('#login-form');
+
+  const phoneForm = root.querySelector('#phone-form');
+  const codeForm = root.querySelector('#code-form');
+  const phoneInput = root.querySelector('#phone');
+  const codeInput = root.querySelector('#code');
+  phoneInput.focus();
+
+  phoneForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const button = phoneForm.querySelector('button[type=submit]');
+    button.disabled = true;
+    try {
+      const data = await api.post('/api/auth/check-phone', { phone: phoneInput.value });
+      phoneInput.value = data.phone;
+      root.querySelector('#welcome').textContent = `أهلاً ${data.name} — أدخل رمز الدخول`;
+      phoneForm.hidden = true;
+      codeForm.hidden = false;
+      codeInput.focus();
+    } catch (error) {
+      fail(error.message);
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  root.querySelector('#back').addEventListener('click', () => {
+    codeForm.hidden = true;
+    phoneForm.hidden = false;
+    codeInput.value = '';
+    phoneInput.focus();
+  });
+
+  codeForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const button = codeForm.querySelector('button[type=submit]');
+    button.disabled = true;
+    try {
+      const data = await api.post('/api/auth/login', { phone: phoneInput.value, code: codeInput.value });
+      state.user = data.user;
+      lastUsedCode = codeInput.value.trim();
+      await loadSettings();
+      window.location.hash = '#/';
+      if (!data.user.must_change_code) ok(`أهلاً ${data.user.name}`);
+      renderApp();
+    } catch (error) {
+      fail(error.message);
+      codeInput.value = '';
+      codeInput.focus();
+    } finally {
+      button.disabled = false;
+    }
+  });
+}
+
+/** شاشة إجبارية بعد أول دخول: استبدال الرمز المؤقت برمز خاص بالمستخدم */
+function changeCodeScreen() {
+  const root = document.getElementById('root');
+  const knownCode = lastUsedCode;
+  root.innerHTML = `
+    <div class="login">
+      <div class="login__card">
+        <img src="${esc(state.settings.logo || '/img/logo.jpg')}" alt="شعار المجمع">
+        <h1 style="font-size:1.2rem">اختر رمز الدخول الخاص بك</h1>
+        <p class="muted small">أهلاً ${esc(state.user.name)} — لحماية حسابك استبدل الرمز المؤقت برمز تختاره أنت.</p>
+        <form id="change-form" class="mt">
+          ${knownCode ? '' : `
+            <div class="field">
+              <label for="current">الرمز الحالي</label>
+              <input id="current" name="current" inputmode="numeric" dir="ltr" class="code-input" maxlength="6" required>
+            </div>`}
+          <div class="field">
+            <label for="next">الرمز الجديد</label>
+            <input id="next" name="next" inputmode="numeric" dir="ltr" class="code-input" maxlength="6"
+                   minlength="4" pattern="\\d{4,6}" required autocomplete="new-password">
+            <span class="hint">من ٤ إلى ٦ أرقام، ويجب أن يختلف عن الرمز المؤقت <b dir="ltr">${esc(state.settings.default_code || '1234')}</b>.</span>
+          </div>
+          <div class="field">
+            <label for="confirm">تأكيد الرمز الجديد</label>
+            <input id="confirm" name="confirm" inputmode="numeric" dir="ltr" class="code-input" maxlength="6"
+                   minlength="4" pattern="\\d{4,6}" required autocomplete="new-password">
+          </div>
+          <button class="btn btn--block" type="submit">حفظ الرمز والمتابعة</button>
+        </form>
+        <button class="btn btn--ghost btn--block mt" id="logout-change">تسجيل الخروج</button>
+      </div>
+    </div>`;
+
+  const form = root.querySelector('#change-form');
+  form.next.focus();
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     const button = form.querySelector('button[type=submit]');
     button.disabled = true;
     try {
-      const data = await api.login(form.username.value.trim(), form.password.value);
+      const data = await api.post('/api/auth/code', {
+        current: knownCode || form.current.value,
+        next: form.next.value,
+        confirm: form.confirm.value
+      });
       state.user = data.user;
-      await loadSettings();
-      ok(`أهلاً ${data.user.name}`);
+      lastUsedCode = null;
+      ok('تم حفظ رمزك الجديد');
       window.location.hash = '#/';
       renderApp();
     } catch (error) {
       fail(error.message);
       button.disabled = false;
     }
+  });
+  root.querySelector('#logout-change').addEventListener('click', async () => {
+    await api.logout();
+    state.user = null;
+    lastUsedCode = null;
+    renderApp();
   });
 }
 
@@ -167,6 +281,8 @@ let currentRender = 0;
 
 async function renderRoute() {
   const path = currentPath();
+  // أي نافذة منبثقة مفتوحة تُغلق عند الانتقال لشاشة أخرى
+  document.getElementById('modal-host').innerHTML = '';
   layout(path.replace(/\/\d+$/, (m) => (path.startsWith('/students/') ? '/students' : m)));
   const content = document.getElementById('content');
   const ctx = { isStaff: isStaff(), isAdmin: isAdmin(), state };
@@ -195,6 +311,10 @@ async function renderRoute() {
   } catch (error) {
     console.error(error);
     if (error.status === 401) { state.user = null; return renderApp(); }
+    if (error.payload && error.payload.code_change_required) {
+      state.user = { ...state.user, must_change_code: true };
+      return renderApp();
+    }
     content.innerHTML = `<div class="card"><div class="empty"><span class="ic">⚠️</span>${esc(error.message)}</div></div>`;
   }
 }
@@ -203,6 +323,7 @@ export function renderApp() {
   document.getElementById('boot').hidden = true;
   document.getElementById('root').hidden = false;
   if (!state.user) return loginScreen();
+  if (state.user.must_change_code) return changeCodeScreen();
   return renderRoute();
 }
 
@@ -220,7 +341,7 @@ async function boot() {
     const data = await api.me();
     state.user = data.user;
   } catch { state.user = null; }
-  window.addEventListener('hashchange', () => { if (state.user) renderRoute(); });
+  window.addEventListener('hashchange', () => { if (state.user) renderApp(); });
   renderApp();
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(() => {});

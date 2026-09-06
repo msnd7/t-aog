@@ -65,8 +65,11 @@ function run() {
     return Number(info.lastInsertRowid);
   });
 
-  const students = NAMES.map((name, index) =>
-    createStudent({ name, halaqaId: halaqaIds[index % halaqaIds.length] }));
+  const students = NAMES.map((name, index) => createStudent({
+    name,
+    halaqaId: halaqaIds[index % halaqaIds.length],
+    phone: `055${String(1000001 + index).padStart(7, '0')}`
+  }));
 
   for (const student of students) {
     for (let day = 0; day < 12; day += 1) {
@@ -114,7 +117,7 @@ function run() {
   }
 
   console.log(`تمت التهيئة: ${halaqaIds.length} حلقات، ${students.length} طالباً، ${REWARDS.length} جوائز.`);
-  console.log('نموذج لحساب طالب:', students[0].username, '/', students[0].password);
+  console.log('نموذج لحساب طالب: رقم الجوال', students[0].phone, '— الرمز المؤقت', students[0].code);
 }
 
 run();

@@ -2,6 +2,7 @@
 import { api } from '../api.js';
 import { esc, num, nb, avatar, dateAr, emptyState, modal, ok, fail } from '../ui.js';
 import { renderBarcodes, drawBarcode } from '../barcode.js';
+import { changeMyCodeModal } from './settings.js';
 
 let mine = null;
 
@@ -12,8 +13,8 @@ export async function render({ state }) {
 
   return {
     title: `أهلاً ${student.name}`,
-    subtitle: `${student.halaqa_name || 'بدون حلقة'} · ${student.barcode}`,
-    actions: `<button class="btn btn--sm btn--ghost" data-change-password>🔑 كلمة المرور</button>`,
+    subtitle: `${student.halaqa_name || 'بدون حلقة'} · ${student.barcode}${student.phone ? ` · ${student.phone}` : ''}`,
+    actions: `<button class="btn btn--sm btn--ghost" data-change-code>🔑 تغيير رمز الدخول</button>`,
     html: `
       <div class="grid cols-2">
         <div class="card center">
@@ -91,26 +92,5 @@ export function mount({ content, refresh }) {
     });
   };
 
-  document.querySelector('[data-change-password]').onclick = () => {
-    modal({
-      title: 'تغيير كلمة المرور',
-      render: () => `
-        <form id="pass-form">
-          <div class="field"><label>كلمة المرور الحالية</label><input type="password" name="current" required></div>
-          <div class="field"><label>كلمة المرور الجديدة</label><input type="password" name="next" required minlength="4"></div>
-          <button class="btn btn--block" type="submit">حفظ</button>
-        </form>`,
-      onMount: (root, close) => {
-        root.querySelector('#pass-form').onsubmit = async (event) => {
-          event.preventDefault();
-          const form = event.target;
-          try {
-            await api.post('/api/auth/password', { current: form.current.value, next: form.next.value });
-            ok('تم تغيير كلمة المرور');
-            close();
-          } catch (error) { fail(error.message); }
-        };
-      }
-    });
-  };
+  document.querySelector('[data-change-code]').onclick = () => changeMyCodeModal();
 }

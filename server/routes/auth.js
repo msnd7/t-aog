@@ -1,45 +1,58 @@
 'use strict';
 const express = require('express');
-const { db } = require('../db');
+const { db, getSettings } = require('../db');
 const {
-  hashPassword, verifyPassword, createSession, destroySession, publicUser,
-  requireAuth, setSessionCookie, clearSessionCookie
+  hashCode, verifyCode, createSession, destroySession, publicUser,
+  setSessionCookie, clearSessionCookie
 } = require('../auth');
+const { normalizePhone } = require('../util');
 
 const router = express.Router();
 
-// Very small in-memory throttle so a shared iPad cannot be used to brute force logins.
+// محاولات الدخول محدودة حتى لا يُخمَّن رمز أحد الطلاب من جهاز مشترك
 const attempts = new Map();
 const WINDOW_MS = 10 * 60 * 1000;
-const MAX_ATTEMPTS = 12;
+const MAX_ATTEMPTS = 8;
 
 function throttled(key) {
-  const now = Date.now();
   const record = attempts.get(key);
-  if (!record || now - record.first > WINDOW_MS) return false;
+  if (!record || Date.now() - record.first > WINDOW_MS) return false;
   return record.count >= MAX_ATTEMPTS;
 }
 
 function recordAttempt(key, ok) {
-  const now = Date.now();
   if (ok) return attempts.delete(key);
   const record = attempts.get(key);
-  if (!record || now - record.first > WINDOW_MS) attempts.set(key, { first: now, count: 1 });
+  if (!record || Date.now() - record.first > WINDOW_MS) attempts.set(key, { first: Date.now(), count: 1 });
   else record.count += 1;
 }
 
+const isValidCode = (code) => /^\d{4,6}$/.test(String(code));
+
+/** التحقق من وجود الرقم قبل طلب الرمز (الخطوة الأولى في شاشة الدخول) */
+router.post('/check-phone', (req, res) => {
+  const phone = normalizePhone(req.body.phone);
+  if (!phone) return res.status(400).json({ error: 'أدخل رقم جوال صحيح، مثال: 0501234567' });
+  const user = db.prepare('SELECT id, name FROM users WHERE phone = ? AND active = 1').get(phone);
+  if (!user) {
+    return res.status(404).json({ error: 'هذا الرقم غير مسجَّل. راجع مشرف الحلقة لتسجيل رقمك.' });
+  }
+  res.json({ phone, name: user.name });
+});
+
 router.post('/login', (req, res) => {
-  const username = String(req.body.username || '').trim().toLowerCase();
-  const password = String(req.body.password || '');
-  if (!username || !password) return res.status(400).json({ error: 'أدخل اسم المستخدم وكلمة المرور' });
+  const phone = normalizePhone(req.body.phone);
+  const code = String(req.body.code || '').trim();
+  if (!phone) return res.status(400).json({ error: 'أدخل رقم جوال صحيح، مثال: 0501234567' });
+  if (!code) return res.status(400).json({ error: 'أدخل رمز الدخول' });
 
-  const key = `${req.ip}:${username}`;
-  if (throttled(key)) return res.status(429).json({ error: 'محاولات كثيرة، حاول بعد قليل' });
+  const key = `${req.ip}:${phone}`;
+  if (throttled(key)) return res.status(429).json({ error: 'محاولات كثيرة، انتظر قليلاً ثم أعد المحاولة' });
 
-  const user = db.prepare('SELECT * FROM users WHERE lower(username) = ? AND active = 1').get(username);
-  if (!user || !verifyPassword(password, user.password_hash)) {
+  const user = db.prepare('SELECT * FROM users WHERE phone = ? AND active = 1').get(phone);
+  if (!user || !verifyCode(code, user.code_hash)) {
     recordAttempt(key, false);
-    return res.status(401).json({ error: 'بيانات الدخول غير صحيحة' });
+    return res.status(401).json({ error: 'رقم الجوال أو الرمز غير صحيح' });
   }
   recordAttempt(key, true);
   const { token, expires } = createSession(user.id);
@@ -57,15 +70,28 @@ router.get('/me', (req, res) => {
   res.json({ user: publicUser(req.user) });
 });
 
-router.post('/password', requireAuth, (req, res) => {
-  const current = String(req.body.current || '');
-  const next = String(req.body.next || '');
-  if (next.length < 4) return res.status(400).json({ error: 'كلمة المرور الجديدة قصيرة جداً' });
-  if (!verifyPassword(current, req.user.password_hash)) {
-    return res.status(400).json({ error: 'كلمة المرور الحالية غير صحيحة' });
+/**
+ * تغيير رمز الدخول. تُستخدم نفسها في شاشة «غيّر رمزك» الإجبارية بعد أول دخول،
+ * ولا تسمح بإبقاء الرمز المؤقت كما هو.
+ */
+router.post('/code', (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'يجب تسجيل الدخول' });
+  const current = String(req.body.current || '').trim();
+  const next = String(req.body.next || '').trim();
+  const confirm = String(req.body.confirm ?? next).trim();
+  const defaultCode = getSettings().default_code || '1234';
+
+  if (!verifyCode(current, req.user.code_hash)) {
+    return res.status(400).json({ error: 'الرمز الحالي غير صحيح' });
   }
-  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(next), req.user.id);
-  res.json({ ok: true });
+  if (!isValidCode(next)) return res.status(400).json({ error: 'الرمز الجديد يجب أن يكون من ٤ إلى ٦ أرقام' });
+  if (next !== confirm) return res.status(400).json({ error: 'الرمز الجديد وتأكيده غير متطابقين' });
+  if (next === defaultCode) return res.status(400).json({ error: 'اختر رمزاً مختلفاً عن الرمز المؤقت' });
+
+  db.prepare('UPDATE users SET code_hash = ?, must_change_code = 0 WHERE id = ?')
+    .run(hashCode(next), req.user.id);
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+  res.json({ ok: true, user: publicUser(user) });
 });
 
 module.exports = router;
