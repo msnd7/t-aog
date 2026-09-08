@@ -64,10 +64,20 @@ function wrapLibsql(raw) {
 
 function openEngine() {
   if (POSTGRES_URL) {
-    const { Pool, types } = require('pg');
-    // pg يُعيد BIGINT/NUMERIC كنصوص افتراضياً (تفادياً لفقدان الدقة)، لكن SUM/COUNT
-    // في هذه المنصة قيمها صغيرة دائماً (نقاط، عدّادات) وتُستخدم كأرقام JS في كل مكان
-    // (طرح رصيد الطالب مثلاً)؛ فتُحوَّل هنا لتطابق سلوك SQLite/better-sqlite3.
+    // قواعد Neon (تكامل Vercel الافتراضي) لا تعمل بثبات مع pg عبر TCP الخام من
+    // دوال Vercel بلا خادم (يفشل مصافحة TLS بخطأ ECONNRESET بشكل متكرر)، لذا
+    // تُستخدم لها سائقة Neon الرسمية عبر WebSocket، وتبقى pg للـPostgres العادية.
+    const isNeon = /neon\.tech/i.test(POSTGRES_URL);
+    let Pool, types, neonConfig;
+    if (isNeon) {
+      ({ Pool, types, neonConfig } = require('@neondatabase/serverless'));
+      neonConfig.webSocketConstructor = require('ws');
+    } else {
+      ({ Pool, types } = require('pg'));
+    }
+    // pg/سائقة Neon تُعيد BIGINT/NUMERIC كنصوص افتراضياً (تفادياً لفقدان الدقة)، لكن
+    // SUM/COUNT في هذه المنصة قيمها صغيرة دائماً (نقاط، عدّادات) وتُستخدم كأرقام JS
+    // في كل مكان (طرح رصيد الطالب مثلاً)؛ فتُحوَّل هنا لتطابق سلوك SQLite/better-sqlite3.
     types.setTypeParser(20, (v) => (v === null ? null : parseInt(v, 10))); // int8/bigint
     types.setTypeParser(1700, (v) => (v === null ? null : parseFloat(v))); // numeric/decimal
     pgPool = new Pool({
