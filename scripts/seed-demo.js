@@ -45,37 +45,43 @@ function isoDaysAgo(days, hour = 17) {
   return new Date(Math.min(d.getTime(), now)).toISOString();
 }
 
-function backdate(entryId, iso) {
-  db.prepare('UPDATE point_entries SET created_at = ? WHERE id = ?').run(iso, entryId);
+async function backdate(entryId, iso) {
+  await db.prepare('UPDATE point_entries SET created_at = ? WHERE id = ?').run(iso, entryId);
 }
 
-function run() {
-  ensureAdmin();
-  const existing = db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'student'").get().n;
+async function run() {
+  await ensureAdmin();
+  const existingRow = await db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'student'").get();
+  const existing = Number(existingRow.n);
   if (existing > 0 && !process.argv.includes('--force')) {
     console.log(`يوجد ${existing} طالباً في قاعدة البيانات. استخدم --force لإضافة بيانات تجريبية فوقها.`);
     return;
   }
-  const admin = db.prepare("SELECT id FROM users WHERE role = 'admin' ORDER BY id LIMIT 1").get();
+  const admin = await db.prepare("SELECT id FROM users WHERE role = 'admin' ORDER BY id LIMIT 1").get();
 
-  const halaqaIds = HALAQAT.map((h) => {
-    const info = db.prepare(`
+  const halaqaIds = [];
+  for (const h of HALAQAT) {
+    const info = await db.prepare(`
       INSERT INTO halaqat (name, teacher_name, active, created_at) VALUES (?, ?, 1, ?)
+      RETURNING id
     `).run(h.name, h.teacher_name, nowIso());
-    return Number(info.lastInsertRowid);
-  });
+    halaqaIds.push(Number(info.lastInsertRowid));
+  }
 
-  const students = NAMES.map((name, index) => createStudent({
-    name,
-    halaqaId: halaqaIds[index % halaqaIds.length],
-    phone: `055${String(1000001 + index).padStart(7, '0')}`
-  }));
+  const students = [];
+  for (const [index, name] of NAMES.entries()) {
+    students.push(await createStudent({
+      name,
+      halaqaId: halaqaIds[index % halaqaIds.length],
+      phone: `055${String(1000001 + index).padStart(7, '0')}`
+    }));
+  }
 
   for (const student of students) {
     for (let day = 0; day < 12; day += 1) {
       if (Math.random() < 0.25) continue;
       const early = Math.random() < 0.45;
-      backdate(addEntry({
+      await backdate(await addEntry({
         studentId: student.id, category: 'attendance', subtype: early ? 'early' : 'general',
         points: early ? 70 : 50, note: early ? 'الحضور المبكر' : 'الحضور العام', userId: admin?.id
       }), isoDaysAgo(day, 16));
@@ -83,19 +89,19 @@ function run() {
       const roll = Math.random();
       const recitation = roll < 0.35 ? ['both', 50, 'حفظ ومراجعة']
         : roll < 0.7 ? ['hifz', 25, 'حفظ'] : ['review', 25, 'مراجعة'];
-      backdate(addEntry({
+      await backdate(await addEntry({
         studentId: student.id, category: 'recitation', subtype: recitation[0],
         points: recitation[1], note: recitation[2], userId: admin?.id
       }), isoDaysAgo(day, 17));
 
       if (Math.random() < 0.4) {
-        backdate(addEntry({
+        await backdate(await addEntry({
           studentId: student.id, category: 'discipline', subtype: 'discipline',
           points: 25, note: 'الانضباط والأخلاق', userId: admin?.id
         }), isoDaysAgo(day, 18));
       }
       if (Math.random() < 0.5) {
-        backdate(addEntry({
+        await backdate(await addEntry({
           studentId: student.id, category: 'scan', subtype: 'barcode', points: 25,
           note: 'مسح الباركود', userId: admin?.id
         }), isoDaysAgo(day, 18));
@@ -104,14 +110,14 @@ function run() {
   }
 
   for (const halaqaId of halaqaIds) {
-    backdate(addEntry({
+    await backdate(await addEntry({
       halaqaId, category: 'halaqa_bonus', points: 25 * (1 + Math.floor(Math.random() * 6)),
       note: 'نظافة وترتيب الحلقة', userId: admin?.id
     }), isoDaysAgo(2, 19));
   }
 
   for (const reward of REWARDS) {
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO rewards (name, description, price, stock, active, created_at) VALUES (?, ?, ?, ?, 1, ?)
     `).run(reward.name, reward.description, reward.price, -1, nowIso());
   }
@@ -120,4 +126,7 @@ function run() {
   console.log('نموذج لحساب طالب: رقم الجوال', students[0].phone, '— الرمز المؤقت', students[0].code);
 }
 
-run();
+run().catch((err) => {
+  console.error(err);
+  process.exitCode = 1;
+});
