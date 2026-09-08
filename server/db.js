@@ -137,8 +137,56 @@ function toPgSql(sql) {
   return sql.replace(/\?/g, () => `$${++i}`);
 }
 
+/**
+ * يقسّم نص SQL متعدد الجمل (بفاصلة منقوطة) إلى جمل مفردة، مع معاملة كتلة
+ * `DO $do$ ... $do$;` ككتلة واحدة غير قابلة للتقسيم (علامة الدولار تُستخدم فيها
+ * كمحدّد نص وليس فاصلاً). ضروري لأن سائقة Neon عبر WebSocket (على عكس pg عبر
+ * TCP الخام) لا تُنفّذ استعلاماً واحداً يحوي عدّة جمل بثبات، فتُرسَل كل جملة
+ * على حدة.
+ */
+function splitPgStatements(sql) {
+  const statements = [];
+  let depth = 0; // مستوى التعشيش داخل $tag$...$tag$
+  let tag = null;
+  let current = '';
+  let i = 0;
+  while (i < sql.length) {
+    const dollarMatch = depth === 0 ? /^\$([a-zA-Z_]*)\$/.exec(sql.slice(i)) : null;
+    if (depth === 0 && dollarMatch) {
+      tag = dollarMatch[0];
+      depth = 1;
+      current += tag;
+      i += tag.length;
+      continue;
+    }
+    if (depth === 1 && sql.startsWith(tag, i)) {
+      current += tag;
+      i += tag.length;
+      depth = 0;
+      tag = null;
+      continue;
+    }
+    const ch = sql[i];
+    if (depth === 0 && ch === ';') {
+      if (current.trim()) statements.push(current.trim());
+      current = '';
+      i += 1;
+      continue;
+    }
+    current += ch;
+    i += 1;
+  }
+  if (current.trim()) statements.push(current.trim());
+  return statements;
+}
+
 async function rawExec(sql) {
-  if (engineKind === 'pg') { await pgPool.query(sql); return; }
+  if (engineKind === 'pg') {
+    for (const statement of splitPgStatements(sql)) {
+      await pgPool.query(statement);
+    }
+    return;
+  }
   rawDb.exec(sql);
 }
 
