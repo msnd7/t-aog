@@ -5,7 +5,7 @@ const {
   hashCode, verifyCode, createSession, destroySession, publicUser,
   setSessionCookie, clearSessionCookie
 } = require('../auth');
-const { normalizePhone } = require('../util');
+const { normalizePhone, asyncHandler } = require('../util');
 
 const router = express.Router();
 
@@ -30,17 +30,17 @@ function recordAttempt(key, ok) {
 const isValidCode = (code) => /^\d{4,6}$/.test(String(code));
 
 /** التحقق من وجود الرقم قبل طلب الرمز (الخطوة الأولى في شاشة الدخول) */
-router.post('/check-phone', (req, res) => {
+router.post('/check-phone', asyncHandler(async (req, res) => {
   const phone = normalizePhone(req.body.phone);
   if (!phone) return res.status(400).json({ error: 'أدخل رقم جوال صحيح، مثال: 0501234567' });
-  const user = db.prepare('SELECT id, name FROM users WHERE phone = ? AND active = 1').get(phone);
+  const user = await db.prepare('SELECT id, name FROM users WHERE phone = ? AND active = 1').get(phone);
   if (!user) {
     return res.status(404).json({ error: 'هذا الرقم غير مسجَّل. راجع مشرف الحلقة لتسجيل رقمك.' });
   }
   res.json({ phone, name: user.name });
-});
+}));
 
-router.post('/login', (req, res) => {
+router.post('/login', asyncHandler(async (req, res) => {
   const phone = normalizePhone(req.body.phone);
   const code = String(req.body.code || '').trim();
   if (!phone) return res.status(400).json({ error: 'أدخل رقم جوال صحيح، مثال: 0501234567' });
@@ -49,22 +49,22 @@ router.post('/login', (req, res) => {
   const key = `${req.ip}:${phone}`;
   if (throttled(key)) return res.status(429).json({ error: 'محاولات كثيرة، انتظر قليلاً ثم أعد المحاولة' });
 
-  const user = db.prepare('SELECT * FROM users WHERE phone = ? AND active = 1').get(phone);
+  const user = await db.prepare('SELECT * FROM users WHERE phone = ? AND active = 1').get(phone);
   if (!user || !verifyCode(code, user.code_hash)) {
     recordAttempt(key, false);
     return res.status(401).json({ error: 'رقم الجوال أو الرمز غير صحيح' });
   }
   recordAttempt(key, true);
-  const { token, expires } = createSession(user.id);
+  const { token, expires } = await createSession(user.id);
   setSessionCookie(res, token, expires);
   res.json({ user: publicUser(user) });
-});
+}));
 
-router.post('/logout', (req, res) => {
-  destroySession(req.sessionToken);
+router.post('/logout', asyncHandler(async (req, res) => {
+  await destroySession(req.sessionToken);
   clearSessionCookie(res);
   res.json({ ok: true });
-});
+}));
 
 router.get('/me', (req, res) => {
   res.json({ user: publicUser(req.user) });
@@ -74,12 +74,12 @@ router.get('/me', (req, res) => {
  * تغيير رمز الدخول. تُستخدم نفسها في شاشة «غيّر رمزك» الإجبارية بعد أول دخول،
  * ولا تسمح بإبقاء الرمز المؤقت كما هو.
  */
-router.post('/code', (req, res) => {
+router.post('/code', asyncHandler(async (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'يجب تسجيل الدخول' });
   const current = String(req.body.current || '').trim();
   const next = String(req.body.next || '').trim();
   const confirm = String(req.body.confirm ?? next).trim();
-  const defaultCode = getSettings().default_code || '1234';
+  const defaultCode = (await getSettings()).default_code || '1234';
 
   if (!verifyCode(current, req.user.code_hash)) {
     return res.status(400).json({ error: 'الرمز الحالي غير صحيح' });
@@ -88,10 +88,10 @@ router.post('/code', (req, res) => {
   if (next !== confirm) return res.status(400).json({ error: 'الرمز الجديد وتأكيده غير متطابقين' });
   if (next === defaultCode) return res.status(400).json({ error: 'اختر رمزاً مختلفاً عن الرمز المؤقت' });
 
-  db.prepare('UPDATE users SET code_hash = ?, must_change_code = 0 WHERE id = ?')
+  await db.prepare('UPDATE users SET code_hash = ?, must_change_code = 0 WHERE id = ?')
     .run(hashCode(next), req.user.id);
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+  const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
   res.json({ ok: true, user: publicUser(user) });
-});
+}));
 
 module.exports = router;

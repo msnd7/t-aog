@@ -125,12 +125,15 @@ api/index.js       مدخل التشغيل على Vercel (دالة بلا خاد
 **[DEPLOY.md](DEPLOY.md)**: Fly.io أو Vercel أو Render أو خادم خاص أو Docker، وكلها تُربط
 بالمستودع لنشر كل تحديث تلقائياً.
 
-- الخادم لا يحتاج قاعدة بيانات خارجية؛ كل شيء داخل `data/app.db`. **خذ نسخة احتياطية من مجلد `data/` دورياً.**
-- على الاستضافات بلا قرص دائم (Vercel) اضبط قاعدة libSQL بعيدة بـ `TURSO_DATABASE_URL`،
-  وحينها تُحفظ الصور المرفوعة داخل قاعدة البيانات تلقائياً.
+- الخادم لا يحتاج قاعدة بيانات خارجية على استضافة بقرص دائم؛ كل شيء داخل `data/app.db`.
+  **خذ نسخة احتياطية من مجلد `data/` دورياً.**
+- على الاستضافات بلا قرص دائم (Vercel) لا بد من قاعدة بعيدة: إمّا **Postgres** بضبط
+  `POSTGRES_URL`/`DATABASE_URL` (تكامل Neon الذي يضيفه Vercel تلقائياً من تبويب Storage)،
+  أو **libSQL/Turso** بضبط `TURSO_DATABASE_URL`. وحينها تُحفظ الصور المرفوعة داخل قاعدة
+  البيانات تلقائياً في الحالتين. التفاصيل في [DEPLOY.md](DEPLOY.md).
 - خلف وكيل عكسي (Nginx/Caddy) مع HTTPS، شغّل الخادم بـ `COOKIE_SECURE=1` لتأمين ملف الجلسة.
 - متغيرات البيئة المدعومة: `PORT`، `DATA_DIR`، `ADMIN_PHONE`، `ADMIN_NAME`، `COOKIE_SECURE`، `TZ`،
-  و`TURSO_DATABASE_URL` مع `TURSO_AUTH_TOKEN`.
+  و`POSTGRES_URL`/`DATABASE_URL` (Postgres)، أو `TURSO_DATABASE_URL` مع `TURSO_AUTH_TOKEN` (libSQL).
 - ملفات جاهزة في المستودع: `Dockerfile` · `fly.toml` · `render.yaml` · `vercel.json` · `api/index.js` ·
   `deploy/nginx.conf` · `deploy/riyad-quran.service`.
 

@@ -25,43 +25,25 @@ const dataDir = resolveDataDir();
 const DATA_DIR = dataDir.dir;
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 
+const POSTGRES_URL = process.env.POSTGRES_URL || process.env.DATABASE_URL
+  || process.env.POSTGRES_PRISMA_URL || process.env.POSTGRES_URL_NON_POOLING || '';
 const REMOTE_URL = process.env.TURSO_DATABASE_URL || process.env.LIBSQL_URL || '';
 const REMOTE_TOKEN = process.env.TURSO_AUTH_TOKEN || process.env.LIBSQL_AUTH_TOKEN || '';
 
 /**
- * محرّك SQLite. الترتيب:
- *   ١) قاعدة libSQL بعيدة (Turso) إن ضُبط TURSO_DATABASE_URL — لازمة للاستضافات
- *      بلا قرص دائم مثل Vercel، لأن ملف قاعدة البيانات هناك يُمحى مع كل نشر.
- *   ٢) node:sqlite المدمج في Node 22.5 فأحدث.
- *   ٣) حزمة better-sqlite3 على إصدارات Node الأقدم.
- * الواجهات الثلاث متطابقة في ما تستخدمه المنصة (prepare / run / get / all / exec).
+ * محرّك قاعدة البيانات. الترتيب:
+ *   ١) Postgres بعيدة (Neon/Vercel Postgres) إن ضُبط POSTGRES_URL أو DATABASE_URL —
+ *      الخيار المفعَّل تلقائياً على Vercel عبر تكامل Neon.
+ *   ٢) قاعدة libSQL بعيدة (Turso) إن ضُبط TURSO_DATABASE_URL — بديل بلا قرص دائم أيضاً.
+ *   ٣) node:sqlite المدمج في Node 22.5 فأحدث، أو حزمة better-sqlite3، على استضافات
+ *      ذات قرص دائم (Fly.io، Render، VPS، أو التطوير المحلي).
+ * الواجهة العليا (db.prepare(sql).get/all/run) واحدة وغير متزامنة (async) للمحركات الثلاثة.
  */
-function openDatabase(file) {
-  if (REMOTE_URL) {
-    let LibsqlDatabase;
-    try {
-      LibsqlDatabase = require('libsql');
-    } catch {
-      throw new Error('ضُبط TURSO_DATABASE_URL لكن حزمة libsql غير مثبّتة: npm install libsql');
-    }
-    return { db: wrapLibsql(new LibsqlDatabase(REMOTE_URL, { authToken: REMOTE_TOKEN })), remote: true };
-  }
-  try {
-    const { DatabaseSync } = require('node:sqlite');
-    if (DatabaseSync) return { db: new DatabaseSync(file), remote: false };
-  } catch { /* إصدار Node لا يوفّر node:sqlite */ }
-  try {
-    const BetterSqlite3 = require('better-sqlite3');
-    return { db: new BetterSqlite3(file), remote: false };
-  } catch {
-    throw new Error(
-      'تعذّر تشغيل قاعدة البيانات: تحتاج Node.js 22.5 أو أحدث، '
-      + 'أو ثبّت الحزمة البديلة بالأمر: npm install better-sqlite3'
-    );
-  }
-}
+let engineKind; // 'pg' | 'libsql' | 'sqlite'
+let pgPool = null;
+let rawDb = null; // مقبض متزامن (sqlite الخام، أو غلاف libsql)
 
-/** سائق libsql يضيف الحقل _metadata إلى كل صف؛ يُنزع كي لا يظهر في ردود الواجهة. */
+/** غلاف libsql يضيف الحقل _metadata إلى كل صف؛ يُنزع كي لا يظهر في ردود الواجهة. */
 function wrapLibsql(raw) {
   const clean = (row) => {
     if (row && typeof row === 'object') delete row._metadata;
@@ -80,22 +62,179 @@ function wrapLibsql(raw) {
   };
 }
 
-const opened = openDatabase(path.join(DATA_DIR, 'app.db'));
-const db = opened.db;
-const REMOTE_DB = opened.remote;
+function openEngine() {
+  if (POSTGRES_URL) {
+    // قواعد Neon (تكامل Vercel الافتراضي) لا تعمل بثبات مع pg عبر TCP الخام من
+    // دوال Vercel بلا خادم (يفشل مصافحة TLS بخطأ ECONNRESET بشكل متكرر)، لذا
+    // تُستخدم لها سائقة Neon الرسمية عبر WebSocket، وتبقى pg للـPostgres العادية.
+    const isNeon = /neon\.tech/i.test(POSTGRES_URL);
+    let Pool, types, neonConfig;
+    if (isNeon) {
+      ({ Pool, types, neonConfig } = require('@neondatabase/serverless'));
+      neonConfig.webSocketConstructor = require('ws');
+    } else {
+      ({ Pool, types } = require('pg'));
+    }
+    // pg/سائقة Neon تُعيد BIGINT/NUMERIC كنصوص افتراضياً (تفادياً لفقدان الدقة)، لكن
+    // SUM/COUNT في هذه المنصة قيمها صغيرة دائماً (نقاط، عدّادات) وتُستخدم كأرقام JS
+    // في كل مكان (طرح رصيد الطالب مثلاً)؛ فتُحوَّل هنا لتطابق سلوك SQLite/better-sqlite3.
+    types.setTypeParser(20, (v) => (v === null ? null : parseInt(v, 10))); // int8/bigint
+    types.setTypeParser(1700, (v) => (v === null ? null : parseFloat(v))); // numeric/decimal
+    pgPool = new Pool({
+      connectionString: POSTGRES_URL,
+      ssl: /sslmode=disable/.test(POSTGRES_URL) ? false : { rejectUnauthorized: false },
+      max: 5
+    });
+    pgPool.on('error', (err) => console.error('خطأ غير متوقع في اتصال Postgres:', err));
+    engineKind = 'pg';
+    return;
+  }
+  if (REMOTE_URL) {
+    let LibsqlDatabase;
+    try {
+      LibsqlDatabase = require('libsql');
+    } catch {
+      throw new Error('ضُبط TURSO_DATABASE_URL لكن حزمة libsql غير مثبّتة: npm install libsql');
+    }
+    rawDb = wrapLibsql(new LibsqlDatabase(REMOTE_URL, { authToken: REMOTE_TOKEN }));
+    engineKind = 'libsql';
+    return;
+  }
+  try {
+    const { DatabaseSync } = require('node:sqlite');
+    if (DatabaseSync) {
+      rawDb = new DatabaseSync(path.join(DATA_DIR, 'app.db'));
+      engineKind = 'sqlite';
+      return;
+    }
+  } catch { /* إصدار Node لا يوفّر node:sqlite */ }
+  try {
+    const BetterSqlite3 = require('better-sqlite3');
+    rawDb = new BetterSqlite3(path.join(DATA_DIR, 'app.db'));
+    engineKind = 'sqlite';
+    return;
+  } catch {
+    throw new Error(
+      'تعذّر تشغيل قاعدة البيانات: تحتاج Node.js 22.5 أو أحدث، '
+      + 'أو ثبّت الحزمة البديلة بالأمر: npm install better-sqlite3'
+    );
+  }
+}
 
+openEngine();
+
+const REMOTE_DB = engineKind === 'pg' || engineKind === 'libsql';
 /** الصور المرفوعة تُخزَّن في قاعدة البيانات متى كان القرص مؤقتاً أو القاعدة بعيدة. */
 const UPLOADS_IN_DB = REMOTE_DB || !dataDir.writable;
 
-/** أوامر PRAGMA غير مدعومة على القواعد البعيدة، فتُتجاوز بهدوء. */
-function tryExec(sql) {
-  try { db.exec(sql); } catch { /* غير مدعوم على هذا المحرّك */ }
+// ---------------------------------------------------------------------------
+// طبقة الاستعلام الخام: واحدة لكل محرّك، تُستخدم داخلياً وأثناء تجهيز المخطط.
+// ---------------------------------------------------------------------------
+
+/** يحوّل عناصر الاستبدال بنمط SQLite (?) إلى نمط Postgres ($1, $2, ...). */
+function toPgSql(sql) {
+  let i = 0;
+  return sql.replace(/\?/g, () => `$${++i}`);
 }
 
-tryExec('PRAGMA journal_mode = WAL');
-tryExec('PRAGMA foreign_keys = ON');
+/**
+ * يقسّم نص SQL متعدد الجمل (بفاصلة منقوطة) إلى جمل مفردة، مع معاملة كتلة
+ * `DO $do$ ... $do$;` ككتلة واحدة غير قابلة للتقسيم (علامة الدولار تُستخدم فيها
+ * كمحدّد نص وليس فاصلاً). ضروري لأن سائقة Neon عبر WebSocket (على عكس pg عبر
+ * TCP الخام) لا تُنفّذ استعلاماً واحداً يحوي عدّة جمل بثبات، فتُرسَل كل جملة
+ * على حدة.
+ */
+function splitPgStatements(sql) {
+  const statements = [];
+  let depth = 0; // مستوى التعشيش داخل $tag$...$tag$
+  let tag = null;
+  let current = '';
+  let i = 0;
+  while (i < sql.length) {
+    const dollarMatch = depth === 0 ? /^\$([a-zA-Z_]*)\$/.exec(sql.slice(i)) : null;
+    if (depth === 0 && dollarMatch) {
+      tag = dollarMatch[0];
+      depth = 1;
+      current += tag;
+      i += tag.length;
+      continue;
+    }
+    if (depth === 1 && sql.startsWith(tag, i)) {
+      current += tag;
+      i += tag.length;
+      depth = 0;
+      tag = null;
+      continue;
+    }
+    const ch = sql[i];
+    if (depth === 0 && ch === ';') {
+      if (current.trim()) statements.push(current.trim());
+      current = '';
+      i += 1;
+      continue;
+    }
+    current += ch;
+    i += 1;
+  }
+  if (current.trim()) statements.push(current.trim());
+  return statements;
+}
 
-const USERS_TABLE = `
+async function rawExec(sql) {
+  if (engineKind === 'pg') {
+    for (const statement of splitPgStatements(sql)) {
+      await pgPool.query(statement);
+    }
+    return;
+  }
+  rawDb.exec(sql);
+}
+
+/** أوامر PRAGMA غير مدعومة على القواعد البعيدة أو Postgres، فتُتجاوز بهدوء. */
+function tryExecSync(sql) {
+  try { rawDb.exec(sql); } catch { /* غير مدعوم على هذا المحرّك */ }
+}
+
+async function rawRun(sql, params) {
+  const hasReturning = /\breturning\b/i.test(sql);
+  if (engineKind === 'pg') {
+    const result = await pgPool.query(toPgSql(sql), params);
+    if (hasReturning) {
+      const row = result.rows[0];
+      return { lastInsertRowid: row ? row.id : undefined, changes: result.rows.length };
+    }
+    return { changes: result.rowCount, lastInsertRowid: undefined };
+  }
+  const stmt = rawDb.prepare(sql);
+  if (hasReturning) {
+    // better-sqlite3 وnode:sqlite يرفضان .run() على جملة تُعيد صفوفاً؛ نستخدم .get() بدلاً منها.
+    const row = stmt.get(...params);
+    return { lastInsertRowid: row ? row.id : undefined, changes: row ? 1 : 0 };
+  }
+  return stmt.run(...params);
+}
+
+async function rawGet(sql, params) {
+  if (engineKind === 'pg') {
+    const result = await pgPool.query(toPgSql(sql), params);
+    return result.rows[0];
+  }
+  return rawDb.prepare(sql).get(...params);
+}
+
+async function rawAll(sql, params) {
+  if (engineKind === 'pg') {
+    const result = await pgPool.query(toPgSql(sql), params);
+    return result.rows;
+  }
+  return rawDb.prepare(sql).all(...params);
+}
+
+// ---------------------------------------------------------------------------
+// المخطط (Schema)
+// ---------------------------------------------------------------------------
+
+const SQLITE_USERS_TABLE = `
 CREATE TABLE IF NOT EXISTS users (
   id               INTEGER PRIMARY KEY AUTOINCREMENT,
   phone            TEXT UNIQUE,
@@ -112,31 +251,29 @@ CREATE TABLE IF NOT EXISTS users (
 
 /**
  * ترقية قواعد البيانات القديمة: كان الدخول باسم مستخدم وكلمة مرور،
- * وأصبح برقم الجوال ورمز مؤقت. تُنقل الحسابات القائمة كما هي.
+ * وأصبح برقم الجوال ورمز مؤقت. تُنقل الحسابات القائمة كما هي. (SQLite/libSQL فقط)
  */
-function migrateUsersToPhoneLogin() {
-  const table = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'users'").get();
+function migrateUsersToPhoneLoginSqlite() {
+  const table = rawDb.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'users'").get();
   if (!table || !/username/.test(table.sql)) return;
-  tryExec('PRAGMA foreign_keys = OFF');
-  tryExec('PRAGMA legacy_alter_table = ON');
-  db.exec('ALTER TABLE users RENAME TO users_legacy');
-  db.exec(USERS_TABLE);
-  db.exec(`
+  tryExecSync('PRAGMA foreign_keys = OFF');
+  tryExecSync('PRAGMA legacy_alter_table = ON');
+  rawDb.exec('ALTER TABLE users RENAME TO users_legacy');
+  rawDb.exec(SQLITE_USERS_TABLE);
+  rawDb.exec(`
     INSERT INTO users (id, phone, code_hash, must_change_code, role, name, halaqa_id, photo, barcode, active, created_at)
     SELECT id,
            CASE WHEN username GLOB '0[0-9]*' THEN username ELSE NULL END,
            password_hash, 1, role, name, halaqa_id, photo, barcode, active, created_at
       FROM users_legacy
   `);
-  db.exec('DROP TABLE users_legacy');
-  tryExec('PRAGMA legacy_alter_table = OFF');
-  tryExec('PRAGMA foreign_keys = ON');
+  rawDb.exec('DROP TABLE users_legacy');
+  tryExecSync('PRAGMA legacy_alter_table = OFF');
+  tryExecSync('PRAGMA foreign_keys = ON');
   console.log('تمت ترقية الحسابات إلى الدخول برقم الجوال.');
 }
 
-migrateUsersToPhoneLogin();
-
-db.exec(`
+const SQLITE_SCHEMA = `
 CREATE TABLE IF NOT EXISTS halaqat (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   name          TEXT NOT NULL,
@@ -146,7 +283,7 @@ CREATE TABLE IF NOT EXISTS halaqat (
   created_at    TEXT NOT NULL
 );
 
-${USERS_TABLE}
+${SQLITE_USERS_TABLE}
 
 CREATE TABLE IF NOT EXISTS cheques (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -221,7 +358,120 @@ CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,
   value TEXT
 );
-`);
+`;
+
+/**
+ * مخطط Postgres. الفرق عن SQLite: SERIAL بدل AUTOINCREMENT، BYTEA بدل BLOB،
+ * وربط دائري بين halaqat وusers (كل منهما يشير إلى الأخرى) يُضاف بعد إنشاء
+ * الجدولين عبر ALTER TABLE، لأن Postgres يتطلب وجود الجدول المُشار إليه مسبقاً.
+ */
+const PG_SCHEMA = `
+CREATE TABLE IF NOT EXISTS users (
+  id               SERIAL PRIMARY KEY,
+  phone            TEXT UNIQUE,
+  code_hash        TEXT NOT NULL,
+  must_change_code INTEGER NOT NULL DEFAULT 1,
+  role             TEXT NOT NULL CHECK (role IN ('admin','supervisor','student')),
+  name             TEXT NOT NULL,
+  halaqa_id        INTEGER,
+  photo            TEXT,
+  barcode          TEXT UNIQUE,
+  active           INTEGER NOT NULL DEFAULT 1,
+  created_at       TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS halaqat (
+  id            SERIAL PRIMARY KEY,
+  name          TEXT NOT NULL,
+  teacher_name  TEXT,
+  supervisor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  active        INTEGER NOT NULL DEFAULT 1,
+  created_at    TEXT NOT NULL
+);
+
+DO $do$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_halaqa_id_fkey') THEN
+    ALTER TABLE users ADD CONSTRAINT users_halaqa_id_fkey
+      FOREIGN KEY (halaqa_id) REFERENCES halaqat(id) ON DELETE SET NULL;
+  END IF;
+END
+$do$;
+
+CREATE TABLE IF NOT EXISTS cheques (
+  id           SERIAL PRIMARY KEY,
+  serial       TEXT NOT NULL UNIQUE,
+  student_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  halaqa_id    INTEGER REFERENCES halaqat(id) ON DELETE SET NULL,
+  type         TEXT NOT NULL,
+  items        TEXT NOT NULL,
+  total        INTEGER NOT NULL,
+  teacher_name TEXT,
+  note         TEXT,
+  issued_by    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  issued_at    TEXT NOT NULL,
+  printed_at   TEXT
+);
+
+CREATE TABLE IF NOT EXISTS point_entries (
+  id         SERIAL PRIMARY KEY,
+  student_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  halaqa_id  INTEGER REFERENCES halaqat(id) ON DELETE SET NULL,
+  category   TEXT NOT NULL,
+  subtype    TEXT,
+  points     INTEGER NOT NULL,
+  note       TEXT,
+  cheque_id  INTEGER REFERENCES cheques(id) ON DELETE SET NULL,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_entries_student ON point_entries(student_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_entries_halaqa  ON point_entries(halaqa_id, created_at);
+
+CREATE TABLE IF NOT EXISTS rewards (
+  id          SERIAL PRIMARY KEY,
+  name        TEXT NOT NULL,
+  description TEXT,
+  price       INTEGER NOT NULL,
+  image       TEXT,
+  stock       INTEGER NOT NULL DEFAULT -1,
+  active      INTEGER NOT NULL DEFAULT 1,
+  created_at  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS redemptions (
+  id         SERIAL PRIMARY KEY,
+  student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  reward_id  INTEGER NOT NULL REFERENCES rewards(id) ON DELETE CASCADE,
+  price      INTEGER NOT NULL,
+  status     TEXT NOT NULL DEFAULT 'pending',
+  note       TEXT,
+  created_at TEXT NOT NULL,
+  handled_at TEXT,
+  handled_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+  token      TEXT PRIMARY KEY,
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS uploads (
+  name       TEXT NOT NULL,
+  chunk      INTEGER NOT NULL,
+  mime       TEXT NOT NULL,
+  data       BYTEA NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (name, chunk)
+);
+
+CREATE TABLE IF NOT EXISTS settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT
+);
+`;
 
 const DEFAULT_SETTINGS = {
   academy_name: 'مجمع رياض القرآن التعليمي',
@@ -241,26 +491,63 @@ const DEFAULT_SETTINGS = {
   default_code: '1234'
 };
 
-const insertSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
-for (const [key, value] of Object.entries(DEFAULT_SETTINGS)) insertSetting.run(key, value);
+async function seedDefaultSettings() {
+  for (const [key, value] of Object.entries(DEFAULT_SETTINGS)) {
+    // بناء متوافق مع Postgres وSQLite الحديث على حد سواء.
+    await rawRun('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO NOTHING', [key, value]);
+  }
+}
 
-function getSettings() {
-  const rows = db.prepare('SELECT key, value FROM settings').all();
+async function initSchema() {
+  if (engineKind === 'pg') {
+    await rawExec(PG_SCHEMA);
+  } else {
+    tryExecSync('PRAGMA journal_mode = WAL');
+    tryExecSync('PRAGMA foreign_keys = ON');
+    migrateUsersToPhoneLoginSqlite();
+    rawDb.exec(SQLITE_SCHEMA);
+  }
+  await seedDefaultSettings();
+}
+
+/** يُحل بعد اكتمال تجهيز المخطط والإعدادات الافتراضية؛ كل استعلام عام ينتظره أولاً. */
+const schemaReady = initSchema().catch((err) => {
+  console.error('تعذّر تجهيز مخطط قاعدة البيانات:', err);
+  throw err;
+});
+
+// ---------------------------------------------------------------------------
+// الواجهة العامة: async في كل المحركات، بنفس شكل الاستخدام السابق (prepare/run/get/all).
+// ---------------------------------------------------------------------------
+
+const db = {
+  prepare(sql) {
+    return {
+      async run(...params) { await schemaReady; return rawRun(sql, params); },
+      async get(...params) { await schemaReady; return rawGet(sql, params); },
+      async all(...params) { await schemaReady; return rawAll(sql, params); }
+    };
+  },
+  async exec(sql) { await schemaReady; return rawExec(sql); }
+};
+
+async function getSettings() {
+  const rows = await db.prepare('SELECT key, value FROM settings').all();
   const out = { ...DEFAULT_SETTINGS };
   for (const row of rows) out[row.key] = row.value;
   return out;
 }
 
-function getSetting(key) {
-  return getSettings()[key];
+async function getSetting(key) {
+  return (await getSettings())[key];
 }
 
-function setSetting(key, value) {
-  db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+async function setSetting(key, value) {
+  await db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
     .run(key, String(value));
 }
 
 module.exports = {
-  db, DATA_DIR, UPLOAD_DIR, REMOTE_DB, UPLOADS_IN_DB,
+  db, ready: schemaReady, DATA_DIR, UPLOAD_DIR, REMOTE_DB, UPLOADS_IN_DB,
   getSettings, getSetting, setSetting, DEFAULT_SETTINGS
 };

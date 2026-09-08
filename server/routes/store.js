@@ -2,7 +2,7 @@
 const express = require('express');
 const { db } = require('../db');
 const { requireAuth, requireStaff } = require('../auth');
-const { nowIso, toInt } = require('../util');
+const { nowIso, toInt, asyncHandler } = require('../util');
 const { studentWallet } = require('../stats');
 const { upload, uploadUrl } = require('../upload');
 const { addEntry } = require('./points');
@@ -11,29 +11,30 @@ const router = express.Router();
 
 // ---- rewards -------------------------------------------------------------
 
-router.get('/rewards', requireAuth, (req, res) => {
+router.get('/rewards', requireAuth, asyncHandler(async (req, res) => {
   const all = req.user.role !== 'student' && req.query.all === '1';
-  const rows = db.prepare(`SELECT * FROM rewards ${all ? '' : 'WHERE active = 1'} ORDER BY price ASC, id DESC`).all();
-  const wallet = req.user.role === 'student' ? studentWallet(req.user.id) : null;
+  const rows = await db.prepare(`SELECT * FROM rewards ${all ? '' : 'WHERE active = 1'} ORDER BY price ASC, id DESC`).all();
+  const wallet = req.user.role === 'student' ? await studentWallet(req.user.id) : null;
   res.json({ rewards: rows, wallet });
-});
+}));
 
-router.post('/rewards', requireStaff, upload.single('image'), (req, res) => {
+router.post('/rewards', requireStaff, upload.single('image'), asyncHandler(async (req, res) => {
   const name = String(req.body.name || '').trim();
   const price = toInt(req.body.price);
   if (!name) return res.status(400).json({ error: 'اسم الجائزة مطلوب' });
   if (price <= 0) return res.status(400).json({ error: 'أدخل سعر الجائزة بالنقاط' });
-  const info = db.prepare(`
+  const info = await db.prepare(`
     INSERT INTO rewards (name, description, price, image, stock, active, created_at)
     VALUES (?, ?, ?, ?, ?, 1, ?)
+    RETURNING id
   `).run(name, String(req.body.description || '').trim() || null, price,
     req.file ? uploadUrl(req.file.filename) : null, toInt(req.body.stock, -1), nowIso());
-  res.status(201).json({ reward: db.prepare('SELECT * FROM rewards WHERE id = ?').get(Number(info.lastInsertRowid)) });
-});
+  res.status(201).json({ reward: await db.prepare('SELECT * FROM rewards WHERE id = ?').get(Number(info.lastInsertRowid)) });
+}));
 
-router.patch('/rewards/:id', requireStaff, upload.single('image'), (req, res) => {
+router.patch('/rewards/:id', requireStaff, upload.single('image'), asyncHandler(async (req, res) => {
   const id = toInt(req.params.id);
-  const reward = db.prepare('SELECT * FROM rewards WHERE id = ?').get(id);
+  const reward = await db.prepare('SELECT * FROM rewards WHERE id = ?').get(id);
   if (!reward) return res.status(404).json({ error: 'الجائزة غير موجودة' });
   const fields = [];
   const params = [];
@@ -45,59 +46,60 @@ router.patch('/rewards/:id', requireStaff, upload.single('image'), (req, res) =>
   if (req.file) { fields.push('image = ?'); params.push(uploadUrl(req.file.filename)); }
   if (!fields.length) return res.status(400).json({ error: 'لا يوجد تعديل' });
   params.push(id);
-  db.prepare(`UPDATE rewards SET ${fields.join(', ')} WHERE id = ?`).run(...params);
-  res.json({ ok: true, reward: db.prepare('SELECT * FROM rewards WHERE id = ?').get(id) });
-});
+  await db.prepare(`UPDATE rewards SET ${fields.join(', ')} WHERE id = ?`).run(...params);
+  res.json({ ok: true, reward: await db.prepare('SELECT * FROM rewards WHERE id = ?').get(id) });
+}));
 
-router.delete('/rewards/:id', requireStaff, (req, res) => {
+router.delete('/rewards/:id', requireStaff, asyncHandler(async (req, res) => {
   const id = toInt(req.params.id);
-  const used = db.prepare('SELECT 1 FROM redemptions WHERE reward_id = ? LIMIT 1').get(id);
+  const used = await db.prepare('SELECT 1 FROM redemptions WHERE reward_id = ? LIMIT 1').get(id);
   if (used) {
-    db.prepare('UPDATE rewards SET active = 0 WHERE id = ?').run(id);
+    await db.prepare('UPDATE rewards SET active = 0 WHERE id = ?').run(id);
     return res.json({ ok: true, archived: true });
   }
-  db.prepare('DELETE FROM rewards WHERE id = ?').run(id);
+  await db.prepare('DELETE FROM rewards WHERE id = ?').run(id);
   res.json({ ok: true, deleted: true });
-});
+}));
 
 // ---- redemptions ---------------------------------------------------------
 
 /** A student swaps points for a reward; the points are held until delivery. */
-router.post('/rewards/:id/redeem', requireAuth, (req, res) => {
+router.post('/rewards/:id/redeem', requireAuth, asyncHandler(async (req, res) => {
   const rewardId = toInt(req.params.id);
   const studentId = req.user.role === 'student' ? req.user.id : toInt(req.body.student_id);
   if (!studentId) return res.status(400).json({ error: 'حدد الطالب' });
   if (req.user.role === 'student' && studentId !== req.user.id) return res.status(403).json({ error: 'غير مصرح' });
 
-  const reward = db.prepare('SELECT * FROM rewards WHERE id = ? AND active = 1').get(rewardId);
+  const reward = await db.prepare('SELECT * FROM rewards WHERE id = ? AND active = 1').get(rewardId);
   if (!reward) return res.status(404).json({ error: 'الجائزة غير متوفرة' });
   if (reward.stock === 0) return res.status(400).json({ error: 'نفدت الكمية من هذه الجائزة' });
 
-  const wallet = studentWallet(studentId);
+  const wallet = await studentWallet(studentId);
   if (wallet.balance < reward.price) {
     return res.status(400).json({ error: `رصيدك ${wallet.balance} ولا يكفي لطلب هذه الجائزة` });
   }
 
-  const info = db.prepare(`
+  const info = await db.prepare(`
     INSERT INTO redemptions (student_id, reward_id, price, status, created_at) VALUES (?, ?, ?, 'pending', ?)
+    RETURNING id
   `).run(studentId, rewardId, reward.price, nowIso());
   const redemptionId = Number(info.lastInsertRowid);
-  addEntry({
+  await addEntry({
     studentId, category: 'redeem', subtype: String(rewardId), points: -reward.price,
     note: `طلب جائزة: ${reward.name}`, userId: req.user.id
   });
-  if (reward.stock > 0) db.prepare('UPDATE rewards SET stock = stock - 1 WHERE id = ?').run(rewardId);
+  if (reward.stock > 0) await db.prepare('UPDATE rewards SET stock = stock - 1 WHERE id = ?').run(rewardId);
 
-  res.status(201).json({ ok: true, id: redemptionId, wallet: studentWallet(studentId) });
-});
+  res.status(201).json({ ok: true, id: redemptionId, wallet: await studentWallet(studentId) });
+}));
 
-router.get('/redemptions', requireAuth, (req, res) => {
+router.get('/redemptions', requireAuth, asyncHandler(async (req, res) => {
   const params = [];
   let where = 'WHERE 1 = 1';
   if (req.user.role === 'student') { where += ' AND r.student_id = ?'; params.push(req.user.id); }
   else if (req.query.student_id) { where += ' AND r.student_id = ?'; params.push(toInt(req.query.student_id)); }
   if (req.query.status) { where += ' AND r.status = ?'; params.push(String(req.query.status)); }
-  const rows = db.prepare(`
+  const rows = await db.prepare(`
     SELECT r.*, w.name AS reward_name, w.image AS reward_image, u.name AS student_name,
            h.name AS halaqa_name
       FROM redemptions r
@@ -107,30 +109,30 @@ router.get('/redemptions', requireAuth, (req, res) => {
       ${where} ORDER BY r.id DESC LIMIT 200
   `).all(...params);
   res.json({ redemptions: rows });
-});
+}));
 
 /** Supervisor marks a request delivered, or rejects it and refunds the points. */
-router.post('/redemptions/:id/status', requireStaff, (req, res) => {
+router.post('/redemptions/:id/status', requireStaff, asyncHandler(async (req, res) => {
   const id = toInt(req.params.id);
   const status = String(req.body.status || '');
   if (!['delivered', 'rejected', 'pending'].includes(status)) {
     return res.status(400).json({ error: 'حالة غير معروفة' });
   }
-  const redemption = db.prepare('SELECT * FROM redemptions WHERE id = ?').get(id);
+  const redemption = await db.prepare('SELECT * FROM redemptions WHERE id = ?').get(id);
   if (!redemption) return res.status(404).json({ error: 'الطلب غير موجود' });
   if (redemption.status === status) return res.json({ ok: true });
 
   if (status === 'rejected' && redemption.status !== 'rejected') {
-    addEntry({
+    await addEntry({
       studentId: redemption.student_id, category: 'refund', points: redemption.price,
       note: 'إرجاع نقاط طلب ملغى', userId: req.user.id
     });
-    const reward = db.prepare('SELECT * FROM rewards WHERE id = ?').get(redemption.reward_id);
-    if (reward && reward.stock >= 0) db.prepare('UPDATE rewards SET stock = stock + 1 WHERE id = ?').run(reward.id);
+    const reward = await db.prepare('SELECT * FROM rewards WHERE id = ?').get(redemption.reward_id);
+    if (reward && reward.stock >= 0) await db.prepare('UPDATE rewards SET stock = stock + 1 WHERE id = ?').run(reward.id);
   }
-  db.prepare('UPDATE redemptions SET status = ?, handled_at = ?, handled_by = ?, note = ? WHERE id = ?')
+  await db.prepare('UPDATE redemptions SET status = ?, handled_at = ?, handled_by = ?, note = ? WHERE id = ?')
     .run(status, nowIso(), req.user.id, String(req.body.note || '').trim() || redemption.note, id);
   res.json({ ok: true });
-});
+}));
 
 module.exports = router;

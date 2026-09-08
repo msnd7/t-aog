@@ -48,7 +48,7 @@ test.before(async (t) => {
   db = require('../server/db');
   const entry = require('../server/index');
   app = entry.app;
-  entry.ensureAdmin();
+  await entry.ensureAdmin();
   server = app.listen(0);
   await new Promise((resolve) => server.once('listening', resolve));
   base = `http://127.0.0.1:${server.address().port}`;

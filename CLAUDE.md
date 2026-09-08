@@ -20,13 +20,16 @@ npm run icons        # توليد أيقونات التطبيق من public/img/
 في الطرفية (رقم الجوال `0500000000` والرمز المؤقت `1234` ما لم يُحدَّد `ADMIN_PHONE`).
 
 متغيرات البيئة: `PORT` · `DATA_DIR` · `ADMIN_PHONE` · `ADMIN_NAME` · `COOKIE_SECURE` · `TZ`
-· `TURSO_DATABASE_URL` و`TURSO_AUTH_TOKEN` (قاعدة libSQL بعيدة للاستضافات بلا قرص دائم).
+· `POSTGRES_URL`/`DATABASE_URL` (Postgres بعيدة، تكامل Neon على Vercel) · `TURSO_DATABASE_URL`
+و`TURSO_AUTH_TOKEN` (قاعدة libSQL بعيدة، بديل للاستضافات بلا قرص دائم).
 
 ## البنية
 
 ```
-server/            خادم Express + SQLite (node:sqlite، وبديله better-sqlite3 على Node الأقدم)
-  db.js            المخطط والترقيات والإعدادات الافتراضية
+server/            خادم Express؛ الواجهة العليا (db.prepare().get/all/run) موحّدة وغير متزامنة
+                   عبر ثلاثة محركات: Postgres (pg) أو libSQL بعيدة أو SQLite محلية
+                   (node:sqlite، وبديله better-sqlite3 على Node الأقدم)
+  db.js            اختيار المحرك، المخطط لكل محرك، الترقيات، الإعدادات الافتراضية
   auth.js          تشفير الرموز والجلسات وحُرّاس الصلاحيات
   stats.js         حساب النقاط والصدارة وفارس الأسبوع وحلقة الأسبوع
   catalog.js       دفاتر الشيكات وقيم بنودها
@@ -58,6 +61,8 @@ data/              قاعدة البيانات والصور المرفوعة (خ
 `deploy/install.sh` (خادم Linux بأمر واحد) · `app.js` (لاستضافات cPanel/Passenger) ·
 `api/index.js` (مدخل Vercel). كل رفعة تشغّل اختبارات GitHub Actions تلقائياً.
 
-على الاستضافات بلا قرص دائم مثل Vercel: `server/db.js` يفتح قاعدة libSQL بعيدة عند ضبط
-`TURSO_DATABASE_URL`، ويسقط إلى مجلد النظام المؤقت إن تعذّرت الكتابة في `DATA_DIR`؛
-وفي الحالتين تُحفظ الصور المرفوعة داخل جدول `uploads` بدل القرص (`UPLOADS_IN_DB`).
+على الاستضافات بلا قرص دائم مثل Vercel: `server/db.js` يفتح Postgres عند ضبط
+`POSTGRES_URL`/`DATABASE_URL` (تكامل Neon — يُضاف تلقائياً من تبويب Storage في Vercel)،
+أو libSQL بعيدة عند ضبط `TURSO_DATABASE_URL`، وإلا يسقط إلى مجلد النظام المؤقت إن تعذّرت
+الكتابة في `DATA_DIR` (بيانات مؤقتة، للتجربة فقط). في كل الحالات البعيدة تُحفظ الصور
+المرفوعة داخل جدول `uploads` بدل القرص (`UPLOADS_IN_DB`).

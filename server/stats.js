@@ -10,12 +10,12 @@ function rangeClause(alias, from, to, params) {
   return sql;
 }
 
-function currentRange(period = 'week') {
-  const settings = getSettings();
+async function currentRange(period = 'week') {
+  const settings = await getSettings();
   return rangeFor(period, toInt(settings.week_start_day, 0));
 }
 
-function studentLeaderboard({ from = null, to = null, halaqaId = null, limit = null } = {}) {
+async function studentLeaderboard({ from = null, to = null, halaqaId = null, limit = null } = {}) {
   const params = [];
   let entryFilter = rangeClause('e', from, to, params);
   let where = "WHERE u.role = 'student' AND u.active = 1";
@@ -29,17 +29,17 @@ function studentLeaderboard({ from = null, to = null, halaqaId = null, limit = n
       LEFT JOIN halaqat h ON h.id = u.halaqa_id
       LEFT JOIN point_entries e ON e.student_id = u.id${entryFilter}
       ${where}
-     GROUP BY u.id
+     GROUP BY u.id, h.name
      ORDER BY points DESC, u.name ASC`;
   if (limit) { sql += ' LIMIT ?'; params.push(limit); }
-  const rows = db.prepare(sql).all(...params);
+  const rows = await db.prepare(sql).all(...params);
   return rows.map((row, index) => ({ ...row, rank: index + 1 }));
 }
 
-function halaqaLeaderboard({ from = null, to = null } = {}) {
+async function halaqaLeaderboard({ from = null, to = null } = {}) {
   const params = [];
   const entryFilter = rangeClause('e', from, to, params);
-  const rows = db.prepare(`
+  const rows = await db.prepare(`
     SELECT h.id, h.name, h.teacher_name,
            COALESCE(SUM(CASE WHEN e.points > 0 THEN e.points ELSE 0 END), 0) AS points,
            (SELECT COUNT(*) FROM users u WHERE u.halaqa_id = h.id AND u.role = 'student' AND u.active = 1)
@@ -57,8 +57,8 @@ function halaqaLeaderboard({ from = null, to = null } = {}) {
 }
 
 /** Earned / spent / spendable balance for one student (all time). */
-function studentWallet(studentId) {
-  const row = db.prepare(`
+async function studentWallet(studentId) {
+  const row = await db.prepare(`
     SELECT COALESCE(SUM(CASE WHEN points > 0 THEN points ELSE 0 END), 0) AS earned,
            COALESCE(SUM(CASE WHEN points < 0 THEN -points ELSE 0 END), 0) AS spent,
            COALESCE(SUM(points), 0) AS balance
@@ -67,38 +67,38 @@ function studentWallet(studentId) {
   return row || { earned: 0, spent: 0, balance: 0 };
 }
 
-function studentPeriodPoints(studentId, period = 'week') {
-  const { from, to } = currentRange(period);
+async function studentPeriodPoints(studentId, period = 'week') {
+  const { from, to } = await currentRange(period);
   const params = [studentId];
   const filter = rangeClause('e', from, to, params);
-  const row = db.prepare(`
+  const row = await db.prepare(`
     SELECT COALESCE(SUM(CASE WHEN e.points > 0 THEN e.points ELSE 0 END), 0) AS points
       FROM point_entries e WHERE e.student_id = ?${filter}
   `).get(...params);
   return row ? row.points : 0;
 }
 
-function studentRank(studentId, period = 'week') {
-  const { from, to } = currentRange(period);
-  const board = studentLeaderboard({ from, to });
+async function studentRank(studentId, period = 'week') {
+  const { from, to } = await currentRange(period);
+  const board = await studentLeaderboard({ from, to });
   const index = board.findIndex((s) => s.id === studentId);
   return { rank: index === -1 ? null : index + 1, total: board.length };
 }
 
 /** فارس الأسبوع — the student with the most points inside the current week. */
-function knightOfWeek() {
-  const { from, to, label } = currentRange('week');
-  const [top] = studentLeaderboard({ from, to, limit: 1 });
+async function knightOfWeek() {
+  const { from, to, label } = await currentRange('week');
+  const [top] = await studentLeaderboard({ from, to, limit: 1 });
   if (!top || top.points <= 0) return null;
   return { ...top, period: label, from, to };
 }
 
 /** حلقة الأسبوع — the circle with the most points inside the current week. */
-function halaqaOfWeek() {
-  const { from, to, label } = currentRange('week');
-  const [top] = halaqaLeaderboard({ from, to });
+async function halaqaOfWeek() {
+  const { from, to, label } = await currentRange('week');
+  const [top] = await halaqaLeaderboard({ from, to });
   if (!top || top.points <= 0) return null;
-  const members = studentLeaderboard({ from, to, halaqaId: top.id, limit: 5 });
+  const members = await studentLeaderboard({ from, to, halaqaId: top.id, limit: 5 });
   return { ...top, members, period: label, from, to };
 }
 

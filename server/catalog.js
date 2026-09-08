@@ -6,8 +6,8 @@ const { toInt } = require('./util');
  * The three cheque books used in the halaqat, with the point value of every
  * line item. Values are editable from the settings screen.
  */
-function chequeCatalog() {
-  const s = getSettings();
+async function chequeCatalog() {
+  const s = await getSettings();
   return {
     attendance: {
       key: 'attendance',

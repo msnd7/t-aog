@@ -21,12 +21,16 @@
   },
   "license": "MIT",
   "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
     "express": "^4.22.2",
     "jsbarcode": "^3.12.1",
-    "multer": "^1.4.4"
+    "multer": "^1.4.4",
+    "pg": "^8.23.0",
+    "ws": "^8.21.3"
   },
+  "comment_pg": "عند ضبط POSTGRES_URL/DATABASE_URL: تُستخدم @neondatabase/serverless (عبر WebSocket على المنفذ 443) لقواعد Neon تحديداً لأن TCP الخام (pg) عبر المنفذ 5432 يفشل بمصافحة TLS من دوال Vercel بلا خادم، وتبقى pg للـPostgres العادية على استضافات أخرى",
   "optionalDependencies": {
     "libsql": "^0.5.29"
   },
-  "comment_optional": "libsql تُستخدم فقط عند ضبط TURSO_DATABASE_URL (استضافات بلا قرص دائم مثل Vercel)"
+  "comment_optional": "libsql تُستخدم فقط عند ضبط TURSO_DATABASE_URL (بديل بلا قرص دائم أيضاً، خارج تكامل Vercel Postgres)"
 }
