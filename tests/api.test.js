@@ -11,7 +11,6 @@ process.env.DATA_DIR = DATA_DIR;
 process.env.ADMIN_PHONE = '0500000001';
 
 const { app, ensureAdmin } = require('../server/index');
-ensureAdmin();
 
 let server;
 let base;
@@ -34,6 +33,7 @@ async function call(method, url, body, isForm = false) {
 }
 
 test.before(async () => {
+  await ensureAdmin();
   server = app.listen(0);
   await new Promise((resolve) => server.once('listening', resolve));
   base = `http://127.0.0.1:${server.address().port}`;
