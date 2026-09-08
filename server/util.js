@@ -135,7 +135,13 @@ const toInt = (value, fallback = 0) => {
   return Number.isFinite(n) ? n : fallback;
 };
 
+/**
+ * يلتقط أي خطأ (أو رفض Promise) من معالج Express غير متزامن ويمرره إلى next(err)،
+ * لأن Express 4 لا يلتقط رفض الـ Promise تلقائياً من داخل async function.
+ */
+const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
 module.exports = {
   nowIso, startOfDay, weekBounds, monthBounds, rangeFor, randomToken, makeBarcode,
-  chequeSerial, tafqit, toInt, normalizePhone, formatPhone
+  chequeSerial, tafqit, toInt, normalizePhone, formatPhone, asyncHandler
 };

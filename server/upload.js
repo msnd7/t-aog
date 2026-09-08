@@ -29,32 +29,31 @@ const multerInstance = multer({
   }
 });
 
-const insertChunk = db.prepare('INSERT INTO uploads (name, chunk, mime, data, created_at) VALUES (?, ?, ?, ?, ?)');
-
 /** يحفظ الصورة في قاعدة البيانات ويمنحها اسماً كما لو حُفظت على القرص. */
-function storeInDatabase(file) {
+async function storeInDatabase(file) {
   const name = newFilename(file.originalname);
   const mime = file.mimetype || 'image/jpeg';
   const at = nowIso();
   const buffer = file.buffer;
   for (let index = 0, chunk = 0; index < buffer.length; index += CHUNK_BYTES, chunk += 1) {
-    insertChunk.run(name, chunk, mime, buffer.subarray(index, index + CHUNK_BYTES), at);
+    await db.prepare('INSERT INTO uploads (name, chunk, mime, data, created_at) VALUES (?, ?, ?, ?, ?)')
+      .run(name, chunk, mime, buffer.subarray(index, index + CHUNK_BYTES), at);
   }
   return name;
 }
 
 /** يقرأ صورة محفوظة في قاعدة البيانات، أو null إن لم توجد. */
-function readFromDatabase(name) {
-  const rows = db.prepare('SELECT mime, data FROM uploads WHERE name = ? ORDER BY chunk').all(name);
+async function readFromDatabase(name) {
+  const rows = await db.prepare('SELECT mime, data FROM uploads WHERE name = ? ORDER BY chunk').all(name);
   if (!rows.length) return null;
   return { mime: rows[0].mime, body: Buffer.concat(rows.map((row) => Buffer.from(row.data))) };
 }
 
 /** يُكمل ما بدأه multer: يخزّن الصورة في القاعدة ويضبط filename كما في حفظ القرص. */
-function persistUpload(req, res, next) {
+async function persistUpload(req, res, next) {
   if (!req.file || !UPLOADS_IN_DB) return next();
   try {
-    req.file.filename = storeInDatabase(req.file);
+    req.file.filename = await storeInDatabase(req.file);
     next();
   } catch (err) {
     next(err);

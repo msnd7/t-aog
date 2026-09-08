@@ -22,16 +22,16 @@ function verifyCode(code, stored) {
   return candidate.length === expected.length && crypto.timingSafeEqual(candidate, expected);
 }
 
-function createSession(userId) {
+async function createSession(userId) {
   const token = randomToken();
   const expires = new Date(Date.now() + SESSION_DAYS * 86400000).toISOString();
-  db.prepare('INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)')
+  await db.prepare('INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)')
     .run(token, userId, nowIso(), expires);
   return { token, expires };
 }
 
-function destroySession(token) {
-  if (token) db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
+async function destroySession(token) {
+  if (token) await db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
 }
 
 function publicUser(user) {
@@ -60,11 +60,11 @@ function readCookie(req, name) {
 }
 
 /** Attaches req.user when the request carries a live session cookie. */
-function attachUser(req, res, next) {
+async function attachUser(req, res, next) {
   req.sessionToken = readCookie(req, COOKIE);
   req.user = null;
   if (req.sessionToken) {
-    const row = db.prepare(`
+    const row = await db.prepare(`
       SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id
       WHERE s.token = ? AND s.expires_at > ? AND u.active = 1
     `).get(req.sessionToken, nowIso());
