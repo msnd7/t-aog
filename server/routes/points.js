@@ -2,7 +2,7 @@
 const express = require('express');
 const { db, getSettings } = require('../db');
 const { requireStaff } = require('../auth');
-const { nowIso, toInt, asyncHandler } = require('../util');
+const { nowIso, toInt, asyncHandler, isVoucherCode } = require('../util');
 const { CATEGORY_LABELS } = require('../catalog');
 const { studentWallet } = require('../stats');
 
@@ -88,6 +88,21 @@ router.delete('/:id', requireStaff, asyncHandler(async (req, res) => {
 router.post('/scan', requireStaff, asyncHandler(async (req, res) => {
   const code = String(req.body.code || '').trim().toUpperCase();
   if (!code) return res.status(400).json({ error: 'لم يتم قراءة الباركود' });
+
+  // باركود شيك فارغ: لا يضيف نقاطاً بنفسه، بل ينتظر مسح بطاقة الطالب بعده
+  if (isVoucherCode(code)) {
+    const voucher = await db.prepare('SELECT * FROM cheque_vouchers WHERE upper(code) = ?').get(code);
+    if (!voucher) return res.status(404).json({ error: `لا يوجد شيك بالباركود ${code}` });
+    if (voucher.redeemed_at) {
+      const owner = await db.prepare('SELECT name FROM users WHERE id = ?').get(voucher.student_id);
+      return res.status(409).json({
+        error: `الشيك ${voucher.code} مصروف مسبقاً${owner ? ` للطالب ${owner.name}` : ''}`,
+        kind: 'voucher', voucher, duplicate: true
+      });
+    }
+    return res.json({ ok: true, kind: 'voucher', voucher });
+  }
+
   const settings = await getSettings();
   const student = await db.prepare(`
     SELECT u.*, h.name AS halaqa_name FROM users u LEFT JOIN halaqat h ON h.id = u.halaqa_id
@@ -117,6 +132,7 @@ router.post('/scan', requireStaff, asyncHandler(async (req, res) => {
   });
   res.status(201).json({
     ok: true,
+    kind: 'student',
     points,
     student: {
       id: student.id, name: student.name, photo: student.photo,

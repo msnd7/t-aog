@@ -1,7 +1,8 @@
 /** شاشة المجموعات (الحلقات): ترتيب الحلقات ونقاطها وأعضاؤها */
 import { api } from '../api.js';
-import { esc, num, nb, avatar, rankBadge, emptyState, modal, formValues, ok, fail, periodTabs, dateAr } from '../ui.js';
-import { awardPointsModal, printCards } from './shared.js';
+import { esc, num, nb, avatar, rankBadge, emptyState, modal, formValues, ok, fail, periodPick, dateAr, icon, menu, menuItem } from '../ui.js';
+import { awardPointsModal } from './shared.js';
+import { cardsModal } from './students.js';
 
 const view = { period: 'week' };
 let cache = { halaqat: [], detail: null };
@@ -17,9 +18,9 @@ export async function render({ params }) {
   return {
     title: 'المجموعات',
     subtitle: `ترتيب الحلقات · ${esc(data.period_label)}`,
-    actions: `<button class="btn btn--sm" data-add-halaqa>➕ حلقة جديدة</button>`,
+    actions: `<button class="btn btn--sm" data-add-halaqa>${icon('plus', { size: 16 })} حلقة جديدة</button>`,
     html: `
-      ${periodTabs(view.period)}
+      <div class="toolbar">${periodPick(view.period)}</div>
       ${data.halaqat.length ? `
         <div class="grid cols-2">
           ${data.halaqat.map((halaqa) => `
@@ -38,12 +39,12 @@ export async function render({ params }) {
               <div class="row between mt">
                 <span class="muted small">المعدل لكل طالب: ${nb(halaqa.average)} · الإجمالي: ${nb(halaqa.total_points)}</span>
                 <div class="row">
-                  <button class="btn btn--sm btn--green" data-bonus="${halaqa.id}">➕ نقاط للحلقة</button>
+                  <button class="btn btn--sm btn--green" data-bonus="${halaqa.id}">${icon('points', { size: 16 })} نقاط للحلقة</button>
                   <a class="btn btn--sm btn--ghost" href="#/halaqat/${halaqa.id}">التفاصيل</a>
                 </div>
               </div>
             </div>`).join('')}
-        </div>` : emptyState('لم تُضف حلقات بعد', '👥')}`
+        </div>` : emptyState('لم تُضف حلقات بعد', 'groups')}`
   };
 }
 
@@ -54,20 +55,27 @@ async function renderDetail(id) {
     title: data.halaqa.name,
     subtitle: `${data.halaqa.teacher_name || 'بدون معلم'} · ${num(data.members.length)} طالباً`,
     actions: `
-      <button class="btn btn--sm btn--green" data-bonus="${data.halaqa.id}">➕ نقاط للحلقة</button>
-      <button class="btn btn--sm btn--ghost" data-edit-halaqa="${data.halaqa.id}">✏️ تعديل</button>
-      <button class="btn btn--sm btn--ghost" data-cards="${data.halaqa.id}">🖨️ بطاقات الباركود</button>
-      <a class="btn btn--sm btn--ghost" href="#/halaqat">رجوع</a>`,
+      <button class="btn btn--sm btn--green" data-bonus="${data.halaqa.id}">${icon('points', { size: 16 })} نقاط للحلقة</button>
+      ${menu({
+    label: 'خيارات الحلقة',
+    name: 'more',
+    className: 'btn btn--sm btn--ghost',
+    items: [
+      menuItem({ label: 'تعديل بيانات الحلقة', name: 'edit', attrs: `data-edit-halaqa="${data.halaqa.id}"` }),
+      menuItem({ label: 'طباعة بطاقات الباركود', name: 'barcode', attrs: `data-cards="${data.halaqa.id}"` }),
+      menuItem({ label: 'رجوع لقائمة الحلقات', name: 'back', href: '#/halaqat' })
+    ]
+  })}`,
     html: `
-      ${periodTabs(view.period)}
+      <div class="toolbar">${periodPick(view.period)}</div>
       <div class="grid cols-3">
-        <div class="stat stat--green"><span class="stat__label">نقاط الفترة</span><span class="stat__value">${num(data.totals.points || 0)}</span></div>
-        <div class="stat stat--blue"><span class="stat__label">ترتيب الحلقة</span><span class="stat__value">${data.totals.rank || '—'}</span></div>
-        <div class="stat stat--orange"><span class="stat__label">المعدل لكل طالب</span><span class="stat__value">${num(data.totals.average || 0)}</span></div>
+        <div class="stat stat--green"><span class="stat__label">${icon('points', { size: 16 })} نقاط الفترة</span><span class="stat__value">${num(data.totals.points || 0)}</span></div>
+        <div class="stat stat--blue"><span class="stat__label">${icon('trophy', { size: 16 })} ترتيب الحلقة</span><span class="stat__value">${data.totals.rank || '—'}</span></div>
+        <div class="stat stat--orange"><span class="stat__label">${icon('students', { size: 16 })} المعدل لكل طالب</span><span class="stat__value">${num(data.totals.average || 0)}</span></div>
       </div>
 
       <div class="card mt">
-        <div class="card__head"><div><h2>طلاب الحلقة</h2><p>مرتبون حسب نقاط الفترة</p></div></div>
+        <div class="card__head"><div><h2>${icon('students')} طلاب الحلقة</h2><p>مرتبون حسب نقاط الفترة</p></div></div>
         ${data.members.length ? `
           <div class="list">
             ${data.members.map((student) => `
@@ -77,12 +85,12 @@ async function renderDetail(id) {
                 <div style="flex:1"><strong>${esc(student.name)}</strong><span class="muted small">${esc(student.barcode || '')}</span></div>
                 <span class="points-pill">${num(student.points)}</span>
               </a>`).join('')}
-          </div>` : emptyState('لا يوجد طلاب في هذه الحلقة', '🎓')}
+          </div>` : emptyState('لا يوجد طلاب في هذه الحلقة', 'students')}
       </div>
 
       ${data.bonuses.length ? `
         <div class="card mt">
-          <div class="card__head"><div><h2>نقاط أضافها المشرف للحلقة</h2></div></div>
+          <div class="card__head"><div><h2>${icon('points')} نقاط أضافها المشرف للحلقة</h2></div></div>
           <div class="list">
             ${data.bonuses.map((bonus) => `
               <div class="list__item">
@@ -95,9 +103,8 @@ async function renderDetail(id) {
 }
 
 export function mount({ content, refresh }) {
-  content.querySelectorAll('[data-period]').forEach((button) => {
-    button.onclick = () => { view.period = button.dataset.period; refresh(); };
-  });
+  const periodSelect = content.querySelector('[data-period-select]');
+  if (periodSelect) periodSelect.onchange = () => { view.period = periodSelect.value; refresh(); };
   document.querySelectorAll('[data-bonus]').forEach((button) => {
     button.onclick = () => awardPointsModal({ halaqaId: Number(button.dataset.bonus), halaqaOnly: true, onDone: refresh });
   });
@@ -106,7 +113,7 @@ export function mount({ content, refresh }) {
   const editButton = document.querySelector('[data-edit-halaqa]');
   if (editButton) editButton.onclick = () => halaqaModal(cache.detail.halaqa, refresh);
   const cardsButton = document.querySelector('[data-cards]');
-  if (cardsButton) cardsButton.onclick = () => printCards({ halaqaId: Number(cardsButton.dataset.cards) });
+  if (cardsButton) cardsButton.onclick = () => cardsModal({ halaqaId: Number(cardsButton.dataset.cards) });
 }
 
 function halaqaModal(halaqa, onDone) {

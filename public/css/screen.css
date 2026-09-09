@@ -1,74 +1,196 @@
-/* شاشة العرض في القاعة: فارس الأسبوع، حلقة الأسبوع، الصدارة */
+/* شاشة العرض في القاعة: فارس الأسبوع، حلقة الأسبوع، منصة التتويج، الصدارة */
 :root {
-  --blue: #14528f;
-  --blue-dark: #0b2f56;
-  --gold: #f6c445;
-  --green: #58c04a;
-  --ink: #0a1b2e;
+  --brand-900: #0b2d3c;
+  --brand-800: #123f52;
+  --brand-700: #17566e;
+  --brand-600: #2e7085;
+  --sage-500: #7fbfae;
+  --sage-400: #9ad3c4;
+  --sun-500: #f0951f;
+  --sun-400: #f5b055;
+  --ink: #07202b;
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; background: var(--blue-dark); color: #fff;
-  font-family: 'IBM Plex Sans Arabic', 'Segoe UI', 'Noto Kufi Arabic', Tahoma, system-ui, sans-serif; overflow: hidden; }
-.screen { height: 100vh; display: flex; flex-direction: column;
-  background: radial-gradient(circle at 20% 0%, #1b6bb5 0%, #0b2f56 55%, #071e39 100%); }
+html, body {
+  margin: 0; height: 100%; background: var(--brand-900); color: #eef6f7; overflow: hidden;
+  font-family: 'IBM Plex Sans Arabic', 'Segoe UI', 'Noto Kufi Arabic', Tahoma, system-ui, sans-serif;
+}
 
-.screen__head { display: flex; align-items: center; justify-content: space-between; padding: 1.4vh 2.4vw; gap: 1rem; }
-.brand { display: flex; align-items: center; gap: 1rem; }
-.brand img { width: 8vh; height: 8vh; object-fit: contain; background: #fff; border-radius: 1.4vh; padding: .5vh; }
-.brand h1 { font-size: clamp(1.1rem, 2.4vh, 2rem); margin: 0; }
-.brand p { margin: 0; font-size: clamp(.7rem, 1.6vh, 1.1rem); opacity: .75; }
-.head-right { text-align: left; }
-.clock { font-size: clamp(1rem, 3vh, 2.2rem); font-weight: 800; font-variant-numeric: tabular-nums; }
-.period { opacity: .75; font-size: clamp(.7rem, 1.7vh, 1.1rem); }
+.screen {
+  height: 100vh; display: flex; flex-direction: column; position: relative; isolation: isolate;
+  background:
+    radial-gradient(70% 55% at 82% 6%, rgba(240, 149, 31, .22), transparent 60%),
+    radial-gradient(60% 55% at 12% 96%, rgba(127, 191, 174, .2), transparent 62%),
+    linear-gradient(160deg, #14495e 0%, var(--brand-900) 55%, #061a24 100%);
+}
+/* نقشة هندسية خفيفة مستوحاة من الزخرفة الإسلامية */
+.screen::before {
+  content: ''; position: absolute; inset: 0; z-index: -1; opacity: .07;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Cg fill='none' stroke='%23ffffff' stroke-width='1'%3E%3Cpath d='M40 2 78 40 40 78 2 40Z'/%3E%3Cpath d='M40 16 64 40 40 64 16 40Z'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 80px 80px;
+}
 
-.stage { flex: 1; padding: 0 3vw; display: grid; place-items: center; overflow: hidden; }
-.loading { opacity: .7; font-size: 2vh; }
-.slide { width: 100%; animation: fade .6s ease; }
-@keyframes fade { from { opacity: 0; transform: translateY(18px); } }
+/* ---- الترويسة ------------------------------------------------------------ */
+.screen__head {
+  display: flex; align-items: center; justify-content: space-between; gap: 1.5rem;
+  padding: 1.6vh 2.6vw 1.2vh; border-bottom: 1px solid rgba(255, 255, 255, .1);
+}
+.brand { display: flex; align-items: center; gap: 1.1rem; }
+.brand img {
+  width: 8.4vh; height: 8.4vh; object-fit: contain; background: #fff; border-radius: 1.6vh; padding: .7vh;
+  box-shadow: 0 1.4vh 3vh -1.4vh rgba(0, 0, 0, .8);
+}
+.brand h1 { font-size: clamp(1.1rem, 2.6vh, 2.1rem); margin: 0; letter-spacing: -.01em; }
+.brand p { margin: 0; font-size: clamp(.7rem, 1.6vh, 1.05rem); opacity: .72; }
+.head-right { text-align: left; display: flex; flex-direction: column; align-items: flex-start; gap: .3vh; }
+.clock { font-size: clamp(1rem, 3.2vh, 2.3rem); font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; }
+.today { font-size: clamp(.65rem, 1.5vh, 1rem); opacity: .68; }
+.period {
+  margin-top: .4vh; font-size: clamp(.65rem, 1.6vh, 1rem); font-weight: 700; padding: .4vh 1.2vw;
+  border-radius: 999px; background: rgba(240, 149, 31, .18); border: 1px solid rgba(240, 149, 31, .4);
+  color: var(--sun-400);
+}
 
-.slide__title { text-align: center; font-size: clamp(1.4rem, 5vh, 4rem); font-weight: 800; margin: 0 0 2vh;
-  background: linear-gradient(90deg, var(--gold), #fff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+/* ---- منصة الشرائح -------------------------------------------------------- */
+.stage { flex: 1; padding: 1.5vh 3vw; display: grid; place-items: center; overflow: hidden; }
+.loading { opacity: .7; font-size: 2.2vh; }
+.slide { width: 100%; animation: rise .7s cubic-bezier(.2, .8, .3, 1); }
+@keyframes rise { from { opacity: 0; transform: translateY(26px) scale(.985); } }
 
-/* فارس الأسبوع */
+.slide__title {
+  display: flex; align-items: center; justify-content: center; gap: 1vw; text-align: center;
+  font-size: clamp(1.2rem, 4.4vh, 3.4rem); font-weight: 800; margin: 0 0 2.4vh;
+}
+.slide__title .ttl {
+  background: linear-gradient(90deg, var(--sun-400), #ffe6bd 60%, #fff);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.slide__title svg { width: 1em; height: 1em; color: var(--sun-400); flex: 0 0 auto; }
+.slide__sub { text-align: center; opacity: .6; font-size: clamp(.7rem, 1.8vh, 1.1rem); margin: -1.6vh 0 2.4vh; }
+
+/* ---- فارس الأسبوع -------------------------------------------------------- */
 .knight { display: flex; align-items: center; justify-content: center; gap: 4vw; flex-wrap: wrap; }
-.knight__photo { width: 34vh; height: 34vh; border-radius: 50%; object-fit: cover; border: 1vh solid var(--gold);
-  box-shadow: 0 2vh 6vh rgba(0,0,0,.45); background: #fff; display: grid; place-content: center; color: var(--blue);
-  font-size: 12vh; font-weight: 800; }
-.knight__name { font-size: clamp(2rem, 8vh, 6rem); font-weight: 800; line-height: 1.1; }
-.knight__meta { font-size: clamp(1rem, 3vh, 2.2rem); opacity: .85; }
-.knight__points { display: inline-block; margin-top: 2vh; background: var(--gold); color: #3a2a00;
-  padding: 1vh 3vw; border-radius: 999px; font-size: clamp(1.1rem, 3.4vh, 2.6rem); font-weight: 800; }
+.knight__frame { position: relative; flex: 0 0 auto; }
+.knight__frame::after {
+  content: ''; position: absolute; inset: -2.2vh; border-radius: 50%;
+  border: .5vh solid rgba(240, 149, 31, .35); animation: halo 3.4s ease-in-out infinite;
+}
+@keyframes halo { 50% { transform: scale(1.045); opacity: .55; } }
+.knight__photo {
+  width: 34vh; height: 34vh; border-radius: 50%; object-fit: cover; border: 1vh solid var(--sun-400);
+  box-shadow: 0 2.4vh 6vh -1.6vh rgba(0, 0, 0, .7); background: #fff; display: grid; place-content: center;
+  color: var(--brand-800); font-size: 12vh; font-weight: 800;
+}
+.knight__name { font-size: clamp(2rem, 7.6vh, 5.6rem); font-weight: 800; line-height: 1.1; }
+.knight__meta { font-size: clamp(1rem, 2.8vh, 2rem); opacity: .8; margin-top: .6vh; }
+.knight__points {
+  display: inline-flex; align-items: center; gap: .8vw; margin-top: 2.2vh;
+  background: linear-gradient(135deg, var(--sun-400), var(--sun-500)); color: #3d2606;
+  padding: 1.1vh 2.6vw; border-radius: 999px; font-size: clamp(1.1rem, 3.2vh, 2.4rem); font-weight: 800;
+  box-shadow: 0 1.6vh 3.4vh -1.6vh rgba(240, 149, 31, .9);
+}
+.runners { display: flex; gap: 1.2vw; margin-top: 2.6vh; flex-wrap: wrap; }
+.runner {
+  display: flex; align-items: center; gap: .8vw; background: rgba(255, 255, 255, .08);
+  border: 1px solid rgba(255, 255, 255, .12); border-radius: 2vh; padding: 1vh 1.4vw;
+}
+.runner img, .runner .ph {
+  width: 6vh; height: 6vh; border-radius: 50%; object-fit: cover; background: rgba(255, 255, 255, .18);
+  display: grid; place-content: center; font-weight: 700; font-size: 2.2vh;
+}
+.runner b { font-size: clamp(.8rem, 2.1vh, 1.3rem); display: block; }
+.runner span { font-size: clamp(.7rem, 1.7vh, 1rem); opacity: .7; }
 
-/* حلقة الأسبوع */
+/* ---- حلقة الأسبوع -------------------------------------------------------- */
 .halaqa-card { text-align: center; }
-.halaqa-card .name { font-size: clamp(2rem, 8vh, 5.5rem); font-weight: 800; color: var(--gold); }
-.halaqa-card .teacher { font-size: clamp(1rem, 3vh, 2.2rem); opacity: .85; }
-.members { display: flex; justify-content: center; gap: 1.6vw; flex-wrap: wrap; margin-top: 3vh; }
-.member { background: rgba(255,255,255,.1); border-radius: 2vh; padding: 1.4vh 1.6vw; min-width: 12vw; }
-.member strong { display: block; font-size: clamp(.9rem, 2.4vh, 1.6rem); }
-.member span { opacity: .8; font-size: clamp(.7rem, 1.8vh, 1.1rem); }
+.halaqa-card .name {
+  font-size: clamp(2rem, 7.4vh, 5rem); font-weight: 800;
+  background: linear-gradient(90deg, var(--sage-400), #fff); -webkit-background-clip: text;
+  background-clip: text; color: transparent;
+}
+.halaqa-card .teacher { font-size: clamp(1rem, 2.8vh, 2rem); opacity: .8; }
+.halaqa-card .knight__points { background: linear-gradient(135deg, var(--sage-400), var(--sage-500)); color: #0d3931; box-shadow: none; }
+.members { display: flex; justify-content: center; gap: 1.4vw; flex-wrap: wrap; margin-top: 3.2vh; }
+.member {
+  background: rgba(255, 255, 255, .08); border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 2vh; padding: 1.4vh 1.6vw; min-width: 11vw;
+}
+.member strong { display: block; font-size: clamp(.9rem, 2.3vh, 1.5rem); }
+.member span { opacity: .75; font-size: clamp(.7rem, 1.7vh, 1.05rem); color: var(--sage-400); font-weight: 700; }
 
-/* الصدارة */
+/* ---- منصة التتويج -------------------------------------------------------- */
+.podium { display: flex; align-items: flex-end; justify-content: center; gap: 2vw; }
+.podium__col { text-align: center; width: 22vw; max-width: 340px; animation: rise .8s backwards; }
+.podium__col:nth-child(1) { animation-delay: .1s; }
+.podium__col:nth-child(2) { animation-delay: .25s; }
+.podium__col:nth-child(3) { animation-delay: .4s; }
+.podium__photo {
+  width: 15vh; height: 15vh; border-radius: 50%; object-fit: cover; margin: 0 auto 1.2vh; background: #fff;
+  color: var(--brand-800); display: grid; place-content: center; font-weight: 800; font-size: 5vh;
+  border: .6vh solid rgba(255, 255, 255, .5);
+}
+.podium__col--1 .podium__photo { width: 20vh; height: 20vh; border-color: var(--sun-400); font-size: 7vh; }
+.podium__name { font-size: clamp(.9rem, 2.6vh, 1.8rem); font-weight: 800; }
+.podium__meta { font-size: clamp(.7rem, 1.7vh, 1.05rem); opacity: .7; margin-bottom: 1vh; }
+.podium__bar {
+  border-radius: 2vh 2vh 0 0; padding: 1.4vh 0 1vh; font-weight: 800; font-variant-numeric: tabular-nums;
+  font-size: clamp(1rem, 2.8vh, 2rem); color: #06222c;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .95), rgba(255, 255, 255, .7));
+}
+.podium__col--1 .podium__bar { height: 22vh; background: linear-gradient(180deg, var(--sun-400), var(--sun-500)); }
+.podium__col--2 .podium__bar { height: 16vh; background: linear-gradient(180deg, #e4edef, #b9cbd0); }
+.podium__col--3 .podium__bar { height: 12vh; background: linear-gradient(180deg, var(--sage-400), var(--sage-500)); }
+.podium__rank { display: block; font-size: clamp(.7rem, 1.7vh, 1.05rem); opacity: .65; font-weight: 700; }
+
+/* ---- لوحة الصدارة -------------------------------------------------------- */
 .board { display: grid; grid-template-columns: repeat(auto-fit, minmax(28vw, 1fr)); gap: 2vw; width: 100%; }
-.board__col { background: rgba(255,255,255,.08); border-radius: 2.4vh; padding: 2vh 1.6vw; }
-.board__col h3 { margin: 0 0 1.4vh; font-size: clamp(1rem, 2.8vh, 2rem); color: var(--gold); text-align: center; }
-.row { display: flex; align-items: center; gap: 1vw; padding: 1vh .6vw; border-bottom: 1px solid rgba(255,255,255,.12);
-  font-size: clamp(.85rem, 2.3vh, 1.5rem); }
+.board__col {
+  background: rgba(255, 255, 255, .07); border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 2.6vh; padding: 2vh 1.6vw; backdrop-filter: blur(6px);
+}
+.board__col h3 {
+  margin: 0 0 1.4vh; font-size: clamp(1rem, 2.6vh, 1.9rem); color: var(--sun-400); text-align: center;
+  display: flex; align-items: center; justify-content: center; gap: .6vw;
+}
+.board__col h3 svg { width: 1em; height: 1em; }
+.row {
+  display: flex; align-items: center; gap: 1vw; padding: .9vh .6vw; border-bottom: 1px solid rgba(255, 255, 255, .09);
+  font-size: clamp(.85rem, 2.2vh, 1.45rem);
+}
 .row:last-child { border-bottom: 0; }
-.rank { width: 4.4vh; height: 4.4vh; border-radius: 50%; display: grid; place-content: center; font-weight: 800;
-  background: rgba(255,255,255,.15); flex: 0 0 auto; font-size: clamp(.75rem, 2vh, 1.2rem); }
-.rank.r1 { background: var(--gold); color: #3a2a00; }
-.rank.r2 { background: #d7dde3; color: #223; }
-.rank.r3 { background: #d08a4e; color: #2a1600; }
+.rank {
+  width: 4.4vh; height: 4.4vh; border-radius: 1.2vh; display: grid; place-content: center; font-weight: 800;
+  background: rgba(255, 255, 255, .12); flex: 0 0 auto; font-size: clamp(.75rem, 1.9vh, 1.15rem);
+}
+.rank.r1 { background: linear-gradient(135deg, var(--sun-400), var(--sun-500)); color: #3d2606; }
+.rank.r2 { background: linear-gradient(135deg, #e4edef, #b3c5ca); color: #22333a; }
+.rank.r3 { background: linear-gradient(135deg, var(--sage-400), var(--sage-500)); color: #0d3931; }
 .row .who { flex: 1; display: flex; align-items: center; gap: .8vw; min-width: 0; }
-.row .who img, .row .who .ph { width: 5vh; height: 5vh; border-radius: 50%; object-fit: cover; background: rgba(255,255,255,.2);
-  display: grid; place-content: center; font-weight: 700; flex: 0 0 auto; }
+.row .who img, .row .who .ph {
+  width: 5vh; height: 5vh; border-radius: 50%; object-fit: cover; background: rgba(255, 255, 255, .16);
+  display: grid; place-content: center; font-weight: 700; flex: 0 0 auto; font-size: 1.8vh;
+}
 .row .who b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.row .pts { font-weight: 800; color: var(--green); font-variant-numeric: tabular-nums; }
-.row .sub { opacity: .65; font-size: .8em; }
+.row .pts { font-weight: 800; color: var(--sage-400); font-variant-numeric: tabular-nums; }
+.row .sub { opacity: .6; font-size: .78em; }
 
-.screen__foot { display: flex; align-items: center; justify-content: space-between; padding: 1.4vh 2.4vw; font-size: 1.6vh; opacity: .7; }
-.dots { display: flex; gap: .6vw; }
-.dot { width: 1.2vh; height: 1.2vh; border-radius: 50%; background: rgba(255,255,255,.3); }
-.dot.active { background: var(--gold); }
+/* ---- التذييل ------------------------------------------------------------- */
+.screen__foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  padding: 1.2vh 2.6vw; font-size: 1.6vh; opacity: .75; border-top: 1px solid rgba(255, 255, 255, .08);
+}
+.dots { display: flex; gap: .7vw; align-items: center; }
+.dot {
+  width: 1.2vh; height: 1.2vh; border-radius: 999px; background: rgba(255, 255, 255, .28);
+  transition: width .3s, background .3s;
+}
+.dot.active { width: 3.6vh; background: var(--sun-400); }
+.progress-line { position: absolute; inset-inline: 0; bottom: 0; height: .5vh; background: rgba(255, 255, 255, .08); }
+.progress-line span {
+  display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--sun-500), var(--sage-400));
+}
 .empty-slide { text-align: center; font-size: 3vh; opacity: .8; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}

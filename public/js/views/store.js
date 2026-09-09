@@ -1,6 +1,6 @@
 /** المتجر: يعرض الجوائز للطالب، ويديرها المشرف */
 import { api } from '../api.js';
-import { esc, num, nb, dateAr, emptyState, modal, ok, fail, confirmDialog } from '../ui.js';
+import { esc, num, nb, dateAr, emptyState, modal, ok, fail, confirmDialog, icon, menu, menuItem } from '../ui.js';
 
 let data = { rewards: [], wallet: null, redemptions: [] };
 
@@ -16,11 +16,11 @@ export async function render({ ctx }) {
   return {
     title: 'المتجر',
     subtitle: staff ? 'إدارة الجوائز وطلبات الطلاب' : `رصيدك ${num(data.wallet ? data.wallet.balance : 0)} نقطة`,
-    actions: staff ? `<button class="btn btn--sm" data-add-reward>➕ جائزة جديدة</button>` : '',
+    actions: staff ? `<button class="btn btn--sm" data-add-reward>${icon('plus', { size: 16 })} جائزة جديدة</button>` : '',
     html: `
       ${staff && pending.length ? `
         <div class="card">
-          <div class="card__head"><div><h2>طلبات بانتظار التسليم</h2><p><bdi>${pending.length}</bdi> طلب</p></div></div>
+          <div class="card__head"><div><h2>${icon('box')} طلبات بانتظار التسليم</h2><p><bdi>${pending.length}</bdi> طلب</p></div></div>
           <div class="list">
             ${pending.map((row) => `
               <div class="list__item">
@@ -29,30 +29,30 @@ export async function render({ ctx }) {
                   <span class="muted small">${esc(row.reward_name)} · ${esc(row.halaqa_name || '')} · ${dateAr(row.created_at)}</span>
                 </div>
                 <span class="chip chip--orange">${num(row.price)}</span>
-                <button class="btn btn--sm btn--green" data-deliver="${row.id}">تم التسليم</button>
-                <button class="btn btn--sm btn--ghost" data-reject="${row.id}">رفض وإرجاع النقاط</button>
+                <button class="btn btn--sm btn--green" data-deliver="${row.id}">${icon('check', { size: 16 })} تم التسليم</button>
+                <button class="btn btn--sm btn--ghost" data-reject="${row.id}">${icon('close', { size: 16 })} رفض وإرجاع</button>
               </div>`).join('')}
           </div>
         </div>` : ''}
 
       ${!staff && data.wallet ? `
         <div class="grid cols-3">
-          <div class="stat stat--green"><span class="stat__label">الرصيد المتاح</span><span class="stat__value">${num(data.wallet.balance)}</span></div>
-          <div class="stat stat--blue"><span class="stat__label">إجمالي المكتسب</span><span class="stat__value">${num(data.wallet.earned)}</span></div>
-          <div class="stat stat--orange"><span class="stat__label">المستبدل</span><span class="stat__value">${num(data.wallet.spent)}</span></div>
+          <div class="stat stat--green"><span class="stat__label">${icon('wallet', { size: 16 })} الرصيد المتاح</span><span class="stat__value">${num(data.wallet.balance)}</span></div>
+          <div class="stat stat--blue"><span class="stat__label">${icon('points', { size: 16 })} إجمالي المكتسب</span><span class="stat__value">${num(data.wallet.earned)}</span></div>
+          <div class="stat stat--orange"><span class="stat__label">${icon('gift', { size: 16 })} المستبدل</span><span class="stat__value">${num(data.wallet.spent)}</span></div>
         </div>` : ''}
 
       <div class="card mt">
-        <div class="card__head"><div><h2>الجوائز</h2><p>${nb(data.rewards.length)} جائزة</p></div></div>
+        <div class="card__head"><div><h2>${icon('gift')} الجوائز</h2><p>${nb(data.rewards.length)} جائزة</p></div></div>
         ${data.rewards.length ? `
           <div class="grid cols-4">
             ${data.rewards.map((reward) => rewardCard(reward, staff, data.wallet)).join('')}
-          </div>` : emptyState(staff ? 'أضف أول جائزة للمتجر' : 'لا توجد جوائز حالياً', '🎁')}
+          </div>` : emptyState(staff ? 'أضف أول جائزة للمتجر' : 'لا توجد جوائز حالياً', 'gift')}
       </div>
 
       ${!staff ? `
         <div class="card mt">
-          <div class="card__head"><div><h2>طلباتي</h2></div></div>
+          <div class="card__head"><div><h2>${icon('box')} طلباتي</h2></div></div>
           ${data.redemptions.length ? `
             <div class="list">
               ${data.redemptions.map((row) => `
@@ -63,7 +63,7 @@ export async function render({ ctx }) {
                     ${statusLabel(row.status)}</span>
                   <span class="points-pill points-pill--minus">${num(row.price)}</span>
                 </div>`).join('')}
-            </div>` : emptyState('لم تطلب أي جائزة بعد', '📦')}
+            </div>` : emptyState('لم تطلب أي جائزة بعد', 'box')}
         </div>` : ''}`
   };
 }
@@ -77,7 +77,7 @@ function rewardCard(reward, staff, wallet) {
   return `
     <div class="reward">
       <div class="reward__img">
-        ${reward.image ? `<img src="${esc(reward.image)}" alt="${esc(reward.name)}" loading="lazy">` : '🎁'}
+        ${reward.image ? `<img src="${esc(reward.image)}" alt="${esc(reward.name)}" loading="lazy">` : icon('gift', { size: 44, stroke: 1.3 })}
       </div>
       <div class="reward__body">
         <strong>${esc(reward.name)}</strong>
@@ -86,9 +86,13 @@ function rewardCard(reward, staff, wallet) {
         ${reward.stock >= 0 ? `<span class="muted small">المتبقي: ${nb(reward.stock)}</span>` : ''}
         ${!reward.active ? '<span class="chip chip--gray">مخفية</span>' : ''}
         <div class="row" style="margin-top:auto">
-          ${staff ? `
-            <button class="btn btn--sm btn--ghost" data-edit-reward="${reward.id}">تعديل</button>
-            <button class="btn btn--sm btn--ghost" data-delete-reward="${reward.id}">حذف</button>`
+          ${staff ? menu({
+    label: 'إدارة الجائزة', name: 'more', className: 'btn btn--sm btn--ghost',
+    items: [
+      menuItem({ label: 'تعديل الجائزة', name: 'edit', attrs: `data-edit-reward="${reward.id}"` }),
+      menuItem({ label: 'حذف الجائزة', name: 'trash', danger: true, attrs: `data-delete-reward="${reward.id}"` })
+    ]
+  })
     : `<button class="btn btn--sm btn--block ${affordable ? '' : 'btn--ghost'}" data-redeem="${reward.id}" ${affordable ? '' : 'disabled'}>
                  ${affordable ? 'استبدال النقاط' : 'الرصيد لا يكفي'}</button>`}
         </div>

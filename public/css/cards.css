@@ -1,47 +1,62 @@
-/* بطاقات الطلاب للطباعة — مقاس البطاقة البنكية 85.6×54مم، ١٠ بطاقات في صفحة A4 */
+/* بطاقات وباركودات الطلاب للطباعة — ثلاث كثافات: بطاقة كاملة، ملصق، ملصق مصغّر */
 :root {
-  --blue: #14528f;
-  --blue-dark: #0b2f56;
-  --blue-mid: #17579a;
-  --gold: #f6c445;
-  --line: #cdd6e2;
-  --ink: #14202e;
+  --brand-900: #0b2d3c;
+  --brand-800: #123f52;
+  --brand-600: #2e7085;
+  --sage-500: #7fbfae;
+  --sun-400: #f5b055;
+  --sun-500: #f0951f;
+  --line: #cfdde1;
+  --muted: #5c757f;
+  --ink: #10242d;
 }
 * { box-sizing: border-box; }
 body {
-  margin: 0; background: #eceae4; color: var(--ink);
+  margin: 0; background: #eef2f3; color: var(--ink);
   font-family: 'IBM Plex Sans Arabic', 'Segoe UI', 'Noto Kufi Arabic', Tahoma, system-ui, sans-serif;
 }
 
 .toolbar {
-  position: sticky; top: 0; z-index: 5; display: flex; justify-content: space-between; align-items: center;
-  gap: 1rem; flex-wrap: wrap; background: #fff; padding: .8rem 1.2rem; border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; z-index: 5; display: flex; justify-content: space-between; align-items: flex-end;
+  gap: 1rem; flex-wrap: wrap; background: #fff; padding: .75rem 1.2rem; border-bottom: 1px solid var(--line);
+  box-shadow: 0 6px 18px -14px rgba(11, 45, 60, .6);
 }
-.actions { display: flex; gap: .6rem; align-items: center; }
-.switch { display: flex; align-items: center; gap: .4rem; font-size: .9rem; }
+#info { font-weight: 700; color: var(--brand-800); font-size: .95rem; }
+.actions { display: flex; gap: .6rem; align-items: flex-end; flex-wrap: wrap; }
+.switch { display: flex; align-items: center; gap: .4rem; font-size: .88rem; min-height: 40px; }
+.pick { display: inline-flex; flex-direction: column; gap: .15rem; }
+.pick > span { font-size: .74rem; color: var(--muted); font-weight: 700; }
+.pick select {
+  min-height: 40px; border-radius: 11px; border: 1px solid var(--line); background: #fff; color: var(--ink);
+  padding: 0 .7rem; font-family: inherit; font-size: .9rem;
+}
 .btn {
-  background: var(--blue); color: #fff; border: 1px solid transparent; border-radius: 10px; padding: .55rem 1rem;
-  font-weight: 600; cursor: pointer; font-family: inherit; font-size: .95rem;
+  background: var(--brand-800); color: #fff; border: 1px solid transparent; border-radius: 11px; padding: .55rem 1rem;
+  font-weight: 700; cursor: pointer; font-family: inherit; font-size: .93rem; min-height: 40px;
+  display: inline-flex; align-items: center; gap: .4rem;
 }
-.btn--ghost { background: #fff; color: var(--blue); border-color: var(--line); }
+.btn:hover { background: var(--brand-600); }
+.btn--ghost { background: #fff; color: var(--brand-800); border-color: var(--line); }
 
-.sheet { max-width: 210mm; margin: 0 auto; padding: 8mm 6mm; }
-.grid { display: grid; grid-template-columns: repeat(2, 85.6mm); gap: 4mm; justify-content: center; }
+.sheet { max-width: 210mm; margin: 0 auto; padding: 8mm 6mm; background: #fff; }
+.grid { display: grid; justify-content: center; }
 
+/* ---- بطاقة كاملة: مقاس البطاقة البنكية، ١٠ في الصفحة -------------------- */
+.grid--card { grid-template-columns: repeat(2, 85.6mm); gap: 4mm; }
 .card {
   position: relative; width: 85.6mm; height: 54mm; border-radius: 4mm; overflow: hidden; color: #fff;
-  background: linear-gradient(135deg, #0e3c6b 0%, var(--blue-mid) 48%, var(--blue-dark) 100%);
+  background: linear-gradient(135deg, var(--brand-800) 0%, var(--brand-600) 50%, var(--brand-900) 100%);
   padding: 3.4mm 4mm; display: flex; flex-direction: column; justify-content: space-between;
   break-inside: avoid; page-break-inside: avoid; print-color-adjust: exact; -webkit-print-color-adjust: exact;
 }
 .card::before {
-  content: ''; position: absolute; inset: 0; opacity: .13;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Cg fill='none' stroke='%23ffffff' stroke-width='1.2'%3E%3Cpath d='M32 3 61 32 32 61 3 32Z'/%3E%3Cpath d='M11 11h42v42H11z'/%3E%3C/g%3E%3C/svg%3E");
+  content: ''; position: absolute; inset: 0; opacity: .14;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Cg fill='none' stroke='%23ffffff' stroke-width='1.1'%3E%3Cpath d='M32 4 60 32 32 60 4 32Z'/%3E%3Cpath d='M32 14 50 32 32 50 14 32Z'/%3E%3C/g%3E%3C/svg%3E");
   background-size: 16mm 16mm;
 }
 .card::after {
   content: ''; position: absolute; width: 46mm; height: 46mm; border-radius: 50%; inset-inline-start: -16mm; top: -22mm;
-  background: radial-gradient(circle, rgba(246, 196, 69, .45), rgba(246, 196, 69, 0) 70%);
+  background: radial-gradient(circle, rgba(240, 149, 31, .45), rgba(240, 149, 31, 0) 70%);
 }
 .card > * { position: relative; z-index: 1; }
 
@@ -53,30 +68,64 @@ body {
   font-size: 2.4mm; padding: .6mm 2mm; border-radius: 999px; background: rgba(255, 255, 255, .18);
   border: .2mm solid rgba(255, 255, 255, .28); white-space: nowrap;
 }
-
 .card__body { display: flex; align-items: center; gap: 3mm; }
 .card__body > div:last-child { min-width: 0; flex: 1; }
 .card__photo {
-  width: 13mm; height: 13mm; border-radius: 50%; object-fit: cover; border: .7mm solid var(--gold);
-  background: #fff; color: var(--blue-dark); display: grid; place-content: center; font-weight: 700; font-size: 5mm;
+  width: 13mm; height: 13mm; border-radius: 50%; object-fit: cover; border: .7mm solid var(--sun-400);
+  background: #fff; color: var(--brand-900); display: grid; place-content: center; font-weight: 700; font-size: 5mm;
   flex: 0 0 auto;
 }
 .card__name { font-size: 4mm; font-weight: 700; line-height: 1.25; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; }
 .card__halaqa { font-size: 2.8mm; opacity: .85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
 .card__scan { background: #fff; border-radius: 2.4mm; padding: 1.4mm 2mm .8mm; text-align: center; }
 .card__scan svg { width: 100%; height: 11mm; display: block; }
-.card__code { font-size: 2.7mm; font-weight: 700; letter-spacing: .8mm; color: var(--blue-dark);
+.card__code { font-size: 2.7mm; font-weight: 700; letter-spacing: .8mm; color: var(--brand-900);
   font-variant-numeric: tabular-nums; }
 
-.cut-guides .card { outline: .2mm dashed #b9c4d2; outline-offset: 1.4mm; }
-.empty { grid-column: 1 / -1; text-align: center; padding: 3rem; color: #5b6b7f; }
+/* ---- ملصق متوسط: ٢٤ باركود في الصفحة ------------------------------------ */
+.grid--label { grid-template-columns: repeat(3, 63mm); gap: 1.5mm; }
+.label {
+  width: 63mm; height: 33mm; border: .3mm solid var(--line); border-radius: 2mm; background: #fff;
+  padding: 1.6mm 2mm 1.2mm; display: flex; flex-direction: column; justify-content: space-between;
+  break-inside: avoid; page-break-inside: avoid; print-color-adjust: exact; -webkit-print-color-adjust: exact;
+  position: relative; overflow: hidden;
+}
+.label::before {
+  content: ''; position: absolute; inset-block: 0; inset-inline-start: 0; width: 1.4mm; background: var(--brand-800);
+}
+.label__top { display: flex; align-items: center; justify-content: space-between; gap: 1.5mm; padding-inline-start: 1.6mm; }
+.label__name {
+  font-size: 3.2mm; font-weight: 800; color: var(--brand-900); overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; flex: 1;
+}
+.label__halaqa {
+  font-size: 2.3mm; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 24mm;
+}
+.label__scan { text-align: center; padding-inline-start: 1.6mm; }
+.label__scan svg { width: 100%; height: 13mm; display: block; }
+.label__code {
+  font-size: 2.7mm; font-weight: 700; letter-spacing: .5mm; color: var(--brand-900);
+  font-variant-numeric: tabular-nums; text-align: center;
+}
+
+/* ---- ملصق مصغّر: ٤٠ باركود في الصفحة ------------------------------------ */
+.grid--mini { grid-template-columns: repeat(4, 47mm); gap: 1.2mm; }
+.grid--mini .label { width: 47mm; height: 26mm; padding: 1.2mm 1.6mm 1mm; }
+.grid--mini .label__name { font-size: 2.8mm; }
+.grid--mini .label__halaqa { display: none; }
+.grid--mini .label__scan svg { height: 10mm; }
+.grid--mini .label__code { font-size: 2.4mm; letter-spacing: .3mm; }
+
+.cut-guides .card, .cut-guides .label { outline: .2mm dashed #b6c6cc; outline-offset: .8mm; }
+.empty { grid-column: 1 / -1; text-align: center; padding: 3rem; color: var(--muted); }
 
 @media print {
   body { background: #fff; }
   .no-print { display: none !important; }
   .sheet { padding: 0; max-width: none; }
-  .grid { gap: 3mm; }
+  .grid--card { gap: 3mm; }
+  .grid--label { gap: 1.2mm; }
+  .grid--mini { gap: 1mm; }
   @page { size: A4 portrait; margin: 9mm 8mm; }
 }

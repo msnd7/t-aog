@@ -1,4 +1,6 @@
 /** أدوات مشتركة لبناء الواجهة */
+import { icon } from './icons.js';
+
 export const esc = (value) => String(value ?? '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -7,6 +9,8 @@ export const num = (value) => Number(value || 0).toLocaleString('en-US');
 
 /** رقم معزول اتجاهياً حتى لا تختلط الأرقام بالنص العربي حوله */
 export const nb = (value) => `<bdi>${num(value)}</bdi>`;
+
+export { icon };
 
 export function dateAr(value, withTime = false) {
   if (!value) return '—';
@@ -45,6 +49,72 @@ export function toast(message, type = '') {
 export const ok = (message) => toast(message, 'ok');
 export const fail = (message) => toast(message, 'err');
 
+// ---------------------------------------------------------------------------
+// القوائم المنسدلة للإجراءات
+// ---------------------------------------------------------------------------
+
+/**
+ * عنصر داخل قائمة منسدلة. `attrs` نص سمات تُربط لاحقاً بالأحداث
+ * (مثال: `data-print="12"`)، و`href` يجعله رابطاً.
+ */
+export function menuItem({ label, name = '', attrs = '', href = '', danger = false, target = '' }) {
+  const inner = `${name ? icon(name, { size: 18 }) : ''}<span>${esc(label)}</span>`;
+  const cls = danger ? 'danger' : '';
+  return href
+    ? `<a class="${cls}" href="${esc(href)}" ${target ? `target="${target}" rel="noopener"` : ''} ${attrs}>${inner}</a>`
+    : `<button type="button" class="${cls}" ${attrs}>${inner}</button>`;
+}
+
+export const menuSep = () => '<span class="menu__sep"></span>';
+
+/**
+ * قائمة منسدلة: زر يفتح لوحة بالإجراءات. تُغلق تلقائياً عند اختيار إجراء
+ * أو عند النقر خارجها (يُدار بمستمع واحد على مستوى الصفحة).
+ */
+export function menu({
+  label = '', name = 'more', items = [], className = 'btn btn--sm btn--ghost', align = 'end', caret = null
+} = {}) {
+  const body = Array.isArray(items) ? items.join('') : items;
+  const showCaret = caret === null ? Boolean(label) : caret;
+  return `
+    <div class="menu">
+      <button type="button" class="${className}" data-menu-toggle aria-haspopup="true" aria-expanded="false"
+              ${label ? '' : 'aria-label="خيارات"'}>
+        ${name ? icon(name, { size: 18 }) : ''}${label ? `<span>${esc(label)}</span>` : ''}
+        ${showCaret ? icon('chevron', { size: 14 }) : ''}
+      </button>
+      <div class="menu__panel ${align === 'start' ? 'menu__panel--start' : ''}" hidden>${body}</div>
+    </div>`;
+}
+
+function closeMenus(except = null) {
+  document.querySelectorAll('.menu__panel').forEach((panel) => {
+    if (panel === except) return;
+    panel.hidden = true;
+    const toggle = panel.parentElement.querySelector('[data-menu-toggle]');
+    if (toggle) toggle.setAttribute('aria-expanded', 'false');
+  });
+}
+
+document.addEventListener('click', (event) => {
+  const toggle = event.target.closest('[data-menu-toggle]');
+  if (toggle) {
+    const panel = toggle.parentElement.querySelector('.menu__panel');
+    const willOpen = panel.hidden;
+    closeMenus(panel);
+    panel.hidden = !willOpen;
+    toggle.setAttribute('aria-expanded', String(willOpen));
+    return;
+  }
+  // النقر على عنصر داخل القائمة يُغلقها بعد تنفيذ الإجراء
+  closeMenus();
+});
+document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeMenus(); });
+
+// ---------------------------------------------------------------------------
+// النوافذ المنبثقة
+// ---------------------------------------------------------------------------
+
 /**
  * نافذة منبثقة بسيطة. `render` يعيد HTML، و`onMount` يستقبل عنصر النافذة
  * ودالة الإغلاق لربط الأحداث.
@@ -57,7 +127,7 @@ export function modal({ title, render, onMount, wide = false }) {
     <div class="modal" style="${wide ? 'width:min(880px,100%)' : ''}" role="dialog" aria-modal="true">
       <div class="modal__head">
         <h3>${esc(title)}</h3>
-        <button class="modal__close" type="button" aria-label="إغلاق">✕</button>
+        <button class="modal__close" type="button" aria-label="إغلاق">${icon('close', { size: 18 })}</button>
       </div>
       <div class="modal__body">${typeof render === 'function' ? render() : render || ''}</div>
     </div>`;
@@ -98,8 +168,8 @@ export function confirmDialog(message, { confirmText = 'تأكيد', danger = tr
   });
 }
 
-export function emptyState(message, icon = '📭') {
-  return `<div class="empty"><span class="ic">${icon}</span>${esc(message)}</div>`;
+export function emptyState(message, name = 'empty') {
+  return `<div class="empty">${icon(name, { size: 40, stroke: 1.3 })}${esc(message)}</div>`;
 }
 
 export function spinner(message = 'جارِ التحميل…') {
@@ -111,15 +181,85 @@ export function formValues(form) {
   return Object.fromEntries(new FormData(form).entries());
 }
 
+// ---------------------------------------------------------------------------
+// الحقول والقوائم المنسدلة الجاهزة
+// ---------------------------------------------------------------------------
+
+/** قائمة منسدلة داخل شريط الأدوات: عنوان صغير فوق الحقل */
+export function pick({ label, attrs = '', options = [], value = '', grow = false }) {
+  return `
+    <label class="pick ${grow ? 'pick--grow' : ''}">
+      <span>${esc(label)}</span>
+      <select ${attrs}>
+        ${options.map((option) => `
+          <option value="${esc(option.value)}" ${String(option.value) === String(value) ? 'selected' : ''}>
+            ${esc(option.label)}
+          </option>`).join('')}
+      </select>
+    </label>`;
+}
+
+/** حقل بحث بعنوان صغير */
+export function searchPick({ label = 'بحث', attrs = '', value = '', placeholder = '' }) {
+  return `
+    <label class="pick pick--grow">
+      <span>${esc(label)}</span>
+      <input type="search" ${attrs} value="${esc(value)}" placeholder="${esc(placeholder)}">
+    </label>`;
+}
+
 export const PERIODS = [
-  { key: 'week', label: 'الأسبوع' },
-  { key: 'month', label: 'الشهر' },
+  { key: 'week', label: 'هذا الأسبوع' },
+  { key: 'month', label: 'هذا الشهر' },
   { key: 'day', label: 'اليوم' },
-  { key: 'all', label: 'الكل' }
+  { key: 'all', label: 'منذ البداية' }
 ];
 
-export function periodTabs(active) {
-  return `<div class="tabs" data-periods>${PERIODS.map((p) =>
-    `<button type="button" data-period="${p.key}" class="${p.key === active ? 'active' : ''}">${p.label}</button>`
-  ).join('')}</div>`;
+/** اختيار الفترة من قائمة منسدلة */
+export function periodPick(active, attrs = 'data-period-select') {
+  return pick({
+    label: 'الفترة',
+    attrs,
+    value: active,
+    options: PERIODS.map((p) => ({ value: p.key, label: p.label }))
+  });
+}
+
+/** خيارات النقاط الجاهزة في القوائم المنسدلة (من فئة ٢٥) */
+export const POINT_CHOICES = [25, 50, 75, 100, 125, 150, 200, 250];
+
+/**
+ * قائمة منسدلة لاختيار عدد النقاط، مع خيار «قيمة أخرى» يُظهر حقلاً رقمياً.
+ * تُستعمل في منح النقاط وفي شاشة المسح.
+ */
+export function pointsPick({ label = 'عدد النقاط', name = 'points', value = 25, allowMinus = true, attrs = '' } = {}) {
+  const choices = [...POINT_CHOICES];
+  if (!choices.includes(Number(value))) choices.unshift(Number(value));
+  const minus = allowMinus ? [-25, -50, -100] : [];
+  return `
+    <label class="pick pick--grow">
+      <span>${esc(label)}</span>
+      <select name="${esc(name)}" ${attrs}>
+        ${choices.map((p) => `<option value="${p}" ${Number(p) === Number(value) ? 'selected' : ''}>${p} نقطة</option>`).join('')}
+        ${minus.map((p) => `<option value="${p}">خصم ${Math.abs(p)} نقطة</option>`).join('')}
+        <option value="custom">قيمة أخرى…</option>
+      </select>
+    </label>`;
+}
+
+/**
+ * يربط قائمة النقاط بحقل «قيمة أخرى»: عند اختيار custom يظهر حقل رقمي
+ * ويعيد `read()` القيمة النهائية.
+ */
+export function bindPointsPick(root, { selectName = 'points', customName = 'points_custom' } = {}) {
+  const select = root.querySelector(`select[name="${selectName}"]`);
+  const custom = root.querySelector(`[name="${customName}"]`);
+  const sync = () => {
+    const isCustom = select.value === 'custom';
+    if (custom) custom.closest('.field, .pick').hidden = !isCustom;
+    if (isCustom && custom) custom.focus();
+  };
+  select.addEventListener('change', sync);
+  sync();
+  return () => (select.value === 'custom' ? Number(custom && custom.value) : Number(select.value));
 }

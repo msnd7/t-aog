@@ -1,10 +1,8 @@
 /** مكوّنات مشتركة بين الشاشات: منح النقاط، اختيار الطلاب، وبطاقات الباركود */
 import { api } from '../api.js';
-import { esc, num, avatar, ok, fail, modal, formValues } from '../ui.js';
+import { esc, num, avatar, ok, fail, modal, formValues, icon, pointsPick, bindPointsPick, searchPick } from '../ui.js';
 
-export const QUICK_POINTS = [25, 50, 75, 100, -25];
-
-/** نافذة منح نقاط لطالب أو لمجموعة طلاب */
+/** نافذة منح نقاط لطالب أو لمجموعة طلاب — عدد النقاط من قائمة منسدلة */
 export function awardPointsModal({ students = [], halaqaId = null, halaqaOnly = false, onDone }) {
   const title = halaqaOnly ? 'إضافة نقاط للحلقة'
     : students.length === 1 ? `إضافة نقاط للطالب: ${students[0].name}`
@@ -13,34 +11,34 @@ export function awardPointsModal({ students = [], halaqaId = null, halaqaOnly = 
     title,
     render: () => `
       <form id="award-form">
-        <div class="field">
-          <label>عدد النقاط</label>
-          <div class="row" style="margin-bottom:.4rem">
-            ${QUICK_POINTS.map((p) => `<button type="button" class="btn btn--ghost btn--sm" data-quick="${p}">${p > 0 ? '+' : ''}${p}</button>`).join('')}
-          </div>
-          <input name="points" type="number" step="5" value="25" required>
-          <span class="hint">النقاط من فئة 25 عادةً. استخدم قيمة سالبة للخصم.</span>
+        <div class="row" style="align-items:flex-start">
+          ${pointsPick({ label: 'عدد النقاط', value: 25 })}
+        </div>
+        <div class="field" hidden>
+          <label>عدد النقاط (قيمة أخرى)</label>
+          <input name="points_custom" type="number" step="5" value="25">
+          <span class="hint">النقاط من فئة ٢٥ عادةً، ويمكن استخدام قيمة سالبة للخصم.</span>
         </div>
         <div class="field">
           <label>السبب / الملاحظة</label>
           <input name="note" placeholder="مثال: إتقان التلاوة">
         </div>
         <div class="row" style="justify-content:flex-end">
-          <button class="btn btn--green" type="submit">حفظ النقاط</button>
+          <button class="btn btn--green" type="submit">${icon('check', { size: 18 })} حفظ النقاط</button>
         </div>
       </form>`,
     onMount: (root, close) => {
       const form = root.querySelector('#award-form');
-      root.querySelectorAll('[data-quick]').forEach((button) => {
-        button.onclick = () => { form.points.value = button.dataset.quick; };
-      });
+      const readPoints = bindPointsPick(form);
       form.onsubmit = async (event) => {
         event.preventDefault();
         const values = formValues(form);
+        const points = readPoints();
+        if (!points) return fail('اختر عدد النقاط');
         try {
           await api.post('/api/points', halaqaOnly
-            ? { halaqa_id: halaqaId, halaqa_only: true, points: Number(values.points), note: values.note }
-            : { student_ids: students.map((s) => s.id), points: Number(values.points), note: values.note, category: 'manual' });
+            ? { halaqa_id: halaqaId, halaqa_only: true, points, note: values.note }
+            : { student_ids: students.map((s) => s.id), points, note: values.note, category: 'manual' });
           ok('تم تسجيل النقاط');
           close();
           if (onDone) onDone();
@@ -53,13 +51,10 @@ export function awardPointsModal({ students = [], halaqaId = null, halaqaOnly = 
 /** قائمة اختيار طلاب مع بحث وتحديد جماعي */
 export function studentPickerMarkup(students, selected = new Set()) {
   return `
-    <div class="field">
-      <input data-picker-search placeholder="ابحث باسم الطالب أو رقم الباركود">
-    </div>
-    <div class="row" style="margin-bottom:.5rem">
-      <button type="button" class="btn btn--ghost btn--sm" data-select-all>تحديد الكل</button>
-      <button type="button" class="btn btn--ghost btn--sm" data-select-none>إلغاء التحديد</button>
-      <span class="spacer"></span>
+    <div class="row" style="margin-bottom:.6rem;align-items:flex-end">
+      ${searchPick({ label: 'بحث عن طالب', attrs: 'data-picker-search', placeholder: 'الاسم أو رقم الباركود' })}
+      <button type="button" class="btn btn--ghost btn--sm" data-select-all>${icon('check', { size: 16 })} تحديد الكل</button>
+      <button type="button" class="btn btn--ghost btn--sm" data-select-none>${icon('close', { size: 16 })} إلغاء التحديد</button>
       <span class="chip" data-picker-count>${selected.size} محدد</span>
     </div>
     <div class="list" data-picker-list style="max-height:44vh;overflow-y:auto">
@@ -122,16 +117,24 @@ export function bindStudentPicker(root, selected = new Set()) {
   return () => [...selected];
 }
 
-/** فتح صفحة طباعة الشيكات المحددة */
+/** فتح صفحة طباعة الشيكات الصادرة باسم طلاب */
 export function printCheques(ids) {
   if (!ids.length) return fail('لا توجد شيكات للطباعة');
   window.open(`/print.html?ids=${ids.join(',')}`, '_blank', 'noopener');
 }
 
+/** فتح صفحة طباعة دفعة الشيكات الفارغة (خمسة في كل صفحة) */
+export function printVouchers({ batch = null, ids = [] } = {}) {
+  if (!batch && !ids.length) return fail('لا توجد شيكات للطباعة');
+  const query = batch ? `batch=${encodeURIComponent(batch)}` : `ids=${ids.join(',')}`;
+  window.open(`/blank.html?${query}`, '_blank', 'noopener');
+}
+
 /** فتح صفحة طباعة بطاقات الباركود */
-export function printCards({ halaqaId = null, studentIds = [] } = {}) {
+export function printCards({ halaqaId = null, studentIds = [], layout = '' } = {}) {
   const params = new URLSearchParams();
   if (halaqaId) params.set('halaqa', halaqaId);
   if (studentIds.length) params.set('ids', studentIds.join(','));
+  if (layout) params.set('layout', layout);
   window.open(`/cards.html?${params.toString()}`, '_blank', 'noopener');
 }

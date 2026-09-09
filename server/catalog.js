@@ -12,7 +12,7 @@ async function chequeCatalog() {
     attendance: {
       key: 'attendance',
       title: 'شيك الحضور',
-      color: '#1b4f9c',
+      color: '#123f52',
       multi: false,
       items: [
         { key: 'early', label: 'الحضور المبكر', points: toInt(s.cheque_attendance_early, 70) },
@@ -22,7 +22,7 @@ async function chequeCatalog() {
     recitation: {
       key: 'recitation',
       title: 'شيك تسميع الورد اليومي',
-      color: '#0f8a4a',
+      color: '#2f7d6b',
       multi: false,
       items: [
         { key: 'hifz', label: 'حفظ', points: toInt(s.cheque_recitation_hifz, 25) },
@@ -33,7 +33,7 @@ async function chequeCatalog() {
     discipline: {
       key: 'discipline',
       title: 'شيك الانضباط والأخلاق',
-      color: '#f39200',
+      color: '#f0951f',
       multi: false,
       items: [
         { key: 'discipline', label: 'الانضباط والأخلاق', points: toInt(s.cheque_discipline, 25) }

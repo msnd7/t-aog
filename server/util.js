@@ -66,6 +66,18 @@ function chequeSerial(id, issuedAt = new Date()) {
   return `${y}-${String(id).padStart(5, '0')}`;
 }
 
+/** باركود الشيك الفارغ: RQC + رقم متسلسل، ومقدمته تميّزه عن باركود الطالب (RQ). */
+const VOUCHER_PREFIX = 'RQC';
+const voucherCode = (seq) => `${VOUCHER_PREFIX}${String(seq).padStart(5, '0')}`;
+const isVoucherCode = (code) => new RegExp(`^${VOUCHER_PREFIX}\\d+$`, 'i').test(String(code || '').trim());
+
+/** معرّف دفعة الطباعة: تاريخ مختصر + رقم عشوائي قصير */
+function batchId(date = new Date()) {
+  const pad = (v) => String(v).padStart(2, '0');
+  const stamp = `${String(date.getFullYear()).slice(2)}${pad(date.getMonth() + 1)}${pad(date.getDate())}`;
+  return `${stamp}-${crypto.randomBytes(2).toString('hex')}`;
+}
+
 const ONES = ['', 'واحد', 'اثنان', 'ثلاثة', 'أربعة', 'خمسة', 'ستة', 'سبعة', 'ثمانية', 'تسعة',
   'عشرة', 'أحد عشر', 'اثنا عشر', 'ثلاثة عشر', 'أربعة عشر', 'خمسة عشر', 'ستة عشر',
   'سبعة عشر', 'ثمانية عشر', 'تسعة عشر'];
@@ -143,5 +155,6 @@ const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, ne
 
 module.exports = {
   nowIso, startOfDay, weekBounds, monthBounds, rangeFor, randomToken, makeBarcode,
-  chequeSerial, tafqit, toInt, normalizePhone, formatPhone, asyncHandler
+  chequeSerial, tafqit, toInt, normalizePhone, formatPhone, asyncHandler,
+  VOUCHER_PREFIX, voucherCode, isVoucherCode, batchId
 };
