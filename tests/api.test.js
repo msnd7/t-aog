@@ -149,6 +149,67 @@ test('شيك التسميع يقبل حفظ ومراجعة بقيمة 50', async
   assert.equal(bad.status, 400);
 });
 
+test('دفعة شيكات فارغة: تُنشأ بباركود لكل شيك وتُصرف بالمسح مرة واحدة', async () => {
+  const options = await call('GET', '/api/cheques/vouchers/options');
+  assert.equal(options.status, 200);
+  const early = options.body.options.find((one) => one.value === 'attendance:early');
+  assert.equal(early.points, 70);
+
+  const batch = await call('POST', '/api/cheques/vouchers', { type: 'attendance', item: 'early', count: 3 });
+  assert.equal(batch.status, 201);
+  assert.equal(batch.body.count, 3);
+  const codes = batch.body.vouchers.map((voucher) => voucher.code);
+  for (const code of codes) assert.match(code, /^RQC\d{5}$/);
+
+  // باركود الشيك لا يضيف نقاطاً بنفسه، بل ينتظر بطاقة الطالب
+  const before = await call('GET', `/api/students/${studentId}`);
+  const scanned = await call('POST', '/api/points/scan', { code: codes[0] });
+  assert.equal(scanned.status, 200);
+  assert.equal(scanned.body.kind, 'voucher');
+  const stillSame = await call('GET', `/api/students/${studentId}`);
+  assert.equal(stillSame.body.wallet.balance, before.body.wallet.balance);
+
+  const redeemed = await call('POST', '/api/cheques/vouchers/redeem', { code: codes[0], student_code: barcode });
+  assert.equal(redeemed.status, 201);
+  assert.equal(redeemed.body.points, 70);
+  assert.equal(redeemed.body.wallet.balance, before.body.wallet.balance + 70);
+
+  // لا يُصرف الشيك مرتين
+  const again = await call('POST', '/api/cheques/vouchers/redeem', { code: codes[0], student_code: barcode });
+  assert.equal(again.status, 409);
+  const rescan = await call('POST', '/api/points/scan', { code: codes[0] });
+  assert.equal(rescan.status, 409);
+  assert.equal(rescan.body.duplicate, true);
+
+  const unknown = await call('POST', '/api/cheques/vouchers/redeem', { code: 'RQC99999', student_code: barcode });
+  assert.equal(unknown.status, 404);
+
+  const batches = await call('GET', '/api/cheques/vouchers/batches');
+  const row = batches.body.batches.find((one) => one.batch === batch.body.batch);
+  assert.equal(Number(row.total), 3);
+  assert.equal(Number(row.redeemed), 1);
+
+  const printed = await call('POST', '/api/cheques/vouchers/printed', { batch: batch.body.batch });
+  assert.equal(printed.body.count, 3);
+
+  const sheet = await call('GET', `/api/cheques/vouchers/print?batch=${batch.body.batch}`);
+  assert.equal(sheet.body.vouchers.length, 3);
+  assert.equal(sheet.body.vouchers[0].amount_words, 'سبعون ريال فقط لا غير');
+
+  // الحذف يبقي المصروف ويحذف غير المصروف
+  const removed = await call('DELETE', `/api/cheques/vouchers/batch/${batch.body.batch}`);
+  assert.equal(removed.body.count, 2);
+});
+
+test('عدد الشيكات في الدفعة لا بد أن يكون صحيحاً', async () => {
+  const none = await call('POST', '/api/cheques/vouchers', { type: 'attendance', item: 'early', count: 0 });
+  assert.equal(none.status, 400);
+  const tooMany = await call('POST', '/api/cheques/vouchers', { type: 'attendance', item: 'early', count: 900 });
+  assert.equal(tooMany.status, 400);
+  const badItem = await call('POST', '/api/cheques/vouchers', { type: 'attendance', item: 'nope', count: 5 });
+  assert.equal(badItem.status, 400);
+});
+
 test('إلغاء الشيك يسحب نقاطه', async () => {
   const before = await call('GET', `/api/students/${studentId}`);
   await call('DELETE', `/api/cheques/${chequeId}`);

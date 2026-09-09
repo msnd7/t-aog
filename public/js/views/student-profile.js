@@ -1,9 +1,9 @@
 /** صفحة الطالب لدى المشرف: النقاط، الباركود، السجل والشيكات */
 import { api } from '../api.js';
-import { esc, num, nb, avatar, dateAr, emptyState, modal, formValues, ok, fail, confirmDialog } from '../ui.js';
+import { esc, num, nb, avatar, dateAr, emptyState, modal, formValues, ok, fail, confirmDialog, icon, menu, menuItem, menuSep } from '../ui.js';
 import { studentCardMarkup, mountStudentCards, openScanMode } from '../student-card.js';
-import { awardPointsModal, printCards, printCheques } from './shared.js';
-import { chequeModal } from './students.js';
+import { awardPointsModal, printCheques } from './shared.js';
+import { chequeModal, cardsModal } from './students.js';
 
 let current = null;
 
@@ -17,9 +17,20 @@ export async function render({ params, state }) {
     title: student.name,
     subtitle: `${student.halaqa_name || 'بدون حلقة'} · ${student.barcode || ''}${student.phone ? ` · ${student.phone}` : ''}`,
     actions: `
-      <button class="btn btn--sm btn--green" data-award>➕ نقاط</button>
-      <button class="btn btn--sm" data-cheque>🧾 شيك</button>
-      <button class="btn btn--sm btn--ghost" data-edit>✏️ تعديل</button>`,
+      <button class="btn btn--sm btn--green" data-award>${icon('points', { size: 16 })} نقاط</button>
+      <button class="btn btn--sm" data-cheque>${icon('cheque', { size: 16 })} شيك</button>
+      ${menu({
+    label: 'خيارات',
+    name: 'more',
+    className: 'btn btn--sm btn--ghost',
+    items: [
+      menuItem({ label: 'تعديل بيانات الطالب', name: 'edit', attrs: 'data-edit' }),
+      menuItem({ label: 'تغيير الصورة', name: 'image', attrs: 'data-photo' }),
+      menuItem({ label: 'طباعة البطاقة', name: 'barcode', attrs: 'data-print-card' }),
+      menuSep(),
+      menuItem({ label: 'إعادة الرمز المؤقت', name: 'key', danger: true, attrs: 'data-reset-code' })
+    ]
+  })}`,
     html: `
       <div class="grid cols-2">
         <div class="card">
@@ -35,26 +46,21 @@ export async function render({ params, state }) {
             </div>
           </div>
           <div class="grid cols-3 mt">
-            <div class="stat stat--green"><span class="stat__label">الرصيد المتاح</span><span class="stat__value">${num(wallet.balance)}</span></div>
-            <div class="stat stat--blue"><span class="stat__label">إجمالي المكتسب</span><span class="stat__value">${num(wallet.earned)}</span></div>
-            <div class="stat stat--orange"><span class="stat__label">المستبدل</span><span class="stat__value">${num(wallet.spent)}</span></div>
+            <div class="stat stat--green"><span class="stat__label">${icon('wallet', { size: 16 })} الرصيد المتاح</span><span class="stat__value">${num(wallet.balance)}</span></div>
+            <div class="stat stat--blue"><span class="stat__label">${icon('points', { size: 16 })} إجمالي المكتسب</span><span class="stat__value">${num(wallet.earned)}</span></div>
+            <div class="stat stat--orange"><span class="stat__label">${icon('gift', { size: 16 })} المستبدل</span><span class="stat__value">${num(wallet.spent)}</span></div>
           </div>
           <div class="row mt">
-            <span class="muted small">رقم الجوال للدخول: <strong dir="ltr">${esc(student.phone || 'لم يُسجَّل')}</strong></span>
+            <span class="muted small">${icon('phone', { size: 15 })} رقم الجوال للدخول:
+              <strong dir="ltr">${esc(student.phone || 'لم يُسجَّل')}</strong></span>
             ${student.must_change_code ? '<span class="chip chip--orange">لم يغيّر الرمز المؤقت بعد</span>' : ''}
-            <span class="spacer"></span>
-            <button class="btn btn--sm btn--ghost" data-reset-code>🔑 إعادة الرمز المؤقت</button>
-            <button class="btn btn--sm btn--ghost" data-photo>🖼️ تغيير الصورة</button>
           </div>
         </div>
 
         <div class="card">
           <div class="card__head">
-            <div><h2>بطاقة الطالب</h2><p>يُمسح الباركود لإضافة النقاط</p></div>
-            <div class="row">
-              <button class="btn btn--sm btn--ghost" data-scan-mode>🔍 عرض للمسح</button>
-              <button class="btn btn--sm btn--ghost" data-print-card>🖨️ طباعة البطاقة</button>
-            </div>
+            <div><h2>${icon('barcode')} بطاقة الطالب</h2><p>يُمسح الباركود لإضافة النقاط</p></div>
+            <button class="btn btn--sm btn--ghost" data-scan-mode>${icon('eye', { size: 16 })} عرض للمسح</button>
           </div>
           ${studentCardMarkup(student, {
         logo: state.settings.logo || '/img/logo.jpg',
@@ -66,7 +72,7 @@ export async function render({ params, state }) {
 
       <div class="grid cols-2 mt">
         <div class="card">
-          <div class="card__head"><div><h2>سجل النقاط</h2><p>آخر ٨٠ حركة</p></div></div>
+          <div class="card__head"><div><h2>${icon('list')} سجل النقاط</h2><p>آخر ٨٠ حركة</p></div></div>
           ${entries.length ? `
             <div class="list">
               ${entries.map((entry) => `
@@ -76,13 +82,13 @@ export async function render({ params, state }) {
                     <span class="muted small">${dateAr(entry.created_at, true)}${entry.cheque_serial ? ` · شيك ${esc(entry.cheque_serial)}` : ''}</span>
                   </div>
                   <span class="points-pill ${entry.points < 0 ? 'points-pill--minus' : ''}">${entry.points > 0 ? '+' : ''}${num(entry.points)}</span>
-                  <button class="btn btn--sm btn--ghost" data-undo="${entry.id}" title="حذف الحركة">✕</button>
+                  <button class="btn btn--sm btn--ghost btn--icon" data-undo="${entry.id}" title="حذف الحركة">${icon('close', { size: 16 })}</button>
                 </div>`).join('')}
-            </div>` : emptyState('لا توجد حركات بعد', '📋')}
+            </div>` : emptyState('لا توجد حركات بعد', 'list')}
         </div>
 
         <div class="card">
-          <div class="card__head"><div><h2>الشيكات</h2><p>الشيكات الصادرة للطالب</p></div></div>
+          <div class="card__head"><div><h2>${icon('cheque')} الشيكات</h2><p>الشيكات الصادرة للطالب</p></div></div>
           ${cheques.length ? `
             <div class="list">
               ${cheques.map((cheque) => `
@@ -92,9 +98,9 @@ export async function render({ params, state }) {
                     <span class="muted small">${esc(cheque.serial)} · ${dateAr(cheque.issued_at)}${cheque.printed_at ? ' · طُبع' : ''}</span>
                   </div>
                   <span class="chip chip--orange">${num(cheque.total)}</span>
-                  <button class="btn btn--sm btn--ghost" data-print-cheque="${cheque.id}">🖨️</button>
+                  <button class="btn btn--sm btn--ghost btn--icon" data-print-cheque="${cheque.id}" title="طباعة الشيك">${icon('print', { size: 16 })}</button>
                 </div>`).join('')}
-            </div>` : emptyState('لم يصدر أي شيك بعد', '🧾')}
+            </div>` : emptyState('لم يصدر أي شيك بعد', 'cheque')}
         </div>
       </div>`
   };
@@ -108,9 +114,9 @@ export function mount({ content, refresh }) {
   document.querySelector('[data-award]').onclick = () => awardPointsModal({ students: [student], onDone: refresh });
   document.querySelector('[data-cheque]').onclick = () => chequeModal([student], refresh);
   document.querySelector('[data-edit]').onclick = () => editModal(student, current.halaqat, refresh);
-  content.querySelector('[data-print-card]').onclick = () => printCards({ studentIds: [student.id] });
-  content.querySelector('[data-photo]').onclick = () => photoModal(student, refresh);
-  content.querySelector('[data-reset-code]').onclick = async () => {
+  document.querySelector('[data-print-card]').onclick = () => cardsModal({ studentIds: [student.id] });
+  document.querySelector('[data-photo]').onclick = () => photoModal(student, refresh);
+  document.querySelector('[data-reset-code]').onclick = async () => {
     if (!await confirmDialog(`إعادة رمز ${student.name} إلى الرمز المؤقت؟ سيُطلب منه اختيار رمز جديد عند الدخول.`,
       { confirmText: 'إعادة الرمز', danger: false })) return;
     try {

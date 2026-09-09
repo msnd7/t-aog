@@ -1,6 +1,6 @@
 /** شاشة الصدارة داخل التطبيق: ترتيب الطلاب أو الحلقات */
 import { api } from '../api.js';
-import { esc, num, nb, avatar, rankBadge, emptyState, periodTabs } from '../ui.js';
+import { esc, num, nb, avatar, rankBadge, emptyState, periodPick, pick, icon } from '../ui.js';
 
 const view = { scope: 'students', period: 'week' };
 
@@ -12,18 +12,22 @@ export async function render() {
   return {
     title: 'الصدارة',
     subtitle: `${view.scope === 'students' ? 'ترتيب الطلاب' : 'ترتيب الحلقات'} · ${esc(data.period_label)}`,
-    actions: `<a class="btn btn--sm btn--ghost" href="/screen.html" target="_blank" rel="noopener">📺 شاشة العرض</a>`,
+    actions: `<a class="btn btn--sm btn--ghost" href="/screen.html" target="_blank" rel="noopener">${icon('screen', { size: 16 })} شاشة العرض</a>`,
     html: `
-      <div class="tabs">
-        <button type="button" data-scope="students" class="${view.scope === 'students' ? 'active' : ''}">الطلاب</button>
-        <button type="button" data-scope="halaqat" class="${view.scope === 'halaqat' ? 'active' : ''}">الحلقات</button>
+      <div class="toolbar">
+        ${pick({
+    label: 'الترتيب حسب',
+    attrs: 'data-scope-select',
+    value: view.scope,
+    options: [{ value: 'students', label: 'ترتيب الطلاب' }, { value: 'halaqat', label: 'ترتيب الحلقات' }]
+  })}
+        ${periodPick(view.period)}
       </div>
-      ${periodTabs(view.period)}
 
       ${top.length ? `
         <div class="grid cols-3">
           ${top.map((row) => `
-            <div class="card center" style="border-top:5px solid ${row.rank === 1 ? 'var(--gold)' : row.rank === 2 ? '#c3c9d0' : '#c1743f'}">
+            <div class="card center" style="border-top:5px solid ${row.rank === 1 ? 'var(--sun-500)' : row.rank === 2 ? '#b9cbd0' : 'var(--sage-500)'}">
               <div style="display:flex;justify-content:center;margin-bottom:.4rem">
                 ${view.scope === 'students' ? avatar(row, 'avatar--lg') : `<span class="avatar avatar--lg">${row.rank}</span>`}
               </div>
@@ -52,16 +56,14 @@ export async function render() {
                   </tr>`).join('')}
               </tbody>
             </table>
-          </div>` : emptyState('لا توجد نقاط في هذه الفترة', '🏆')}
+          </div>` : emptyState('لا توجد نقاط في هذه الفترة', 'trophy')}
       </div>`
   };
 }
 
 export function mount({ content, refresh }) {
-  content.querySelectorAll('[data-scope]').forEach((button) => {
-    button.onclick = () => { view.scope = button.dataset.scope; refresh(); };
-  });
-  content.querySelectorAll('[data-period]').forEach((button) => {
-    button.onclick = () => { view.period = button.dataset.period; refresh(); };
-  });
+  const scopeSelect = content.querySelector('[data-scope-select]');
+  scopeSelect.onchange = () => { view.scope = scopeSelect.value; refresh(); };
+  const periodSelect = content.querySelector('[data-period-select]');
+  periodSelect.onchange = () => { view.period = periodSelect.value; refresh(); };
 }

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>شاشة العرض — رياض القرآن</title>
-  <meta name="theme-color" content="#0e3c6b">
+  <meta name="theme-color" content="#0b2d3c">
   <link rel="icon" href="/img/favicon.png">
   <link rel="preload" href="/fonts/ibm-plex-sans-arabic-400-arabic.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/fonts/ibm-plex-sans-arabic-600-arabic.woff2" as="font" type="font/woff2" crossorigin>
@@ -23,6 +23,7 @@
       </div>
       <div class="head-right">
         <div class="clock" id="clock"></div>
+        <div class="today" id="today"></div>
         <div class="period" id="period">هذا الأسبوع</div>
       </div>
     </header>
@@ -31,8 +32,9 @@
 
     <footer class="screen__foot">
       <div class="dots" id="dots"></div>
-      <div class="hint">تُحدَّث الشاشة تلقائياً · اضغط مفتاح المسافة للتنقل</div>
+      <div class="hint">تُحدَّث الشاشة تلقائياً · مفتاح المسافة للتنقل · حرف F لملء الشاشة</div>
     </footer>
+    <div class="progress-line"><span></span></div>
   </div>
   <script type="module" src="/js/screen.js"></script>
 </body>

@@ -1,8 +1,16 @@
 /** الإعدادات: بيانات المجمع، قيم الشيكات، حسابات المشرفين */
 import { api } from '../api.js';
-import { esc, ok, fail, modal, formValues, confirmDialog } from '../ui.js';
+import { esc, ok, fail, modal, formValues, confirmDialog, icon, menu, menuItem, pick } from '../ui.js';
 
 let cache = { settings: {}, staff: [] };
+const view = { section: 'all' };
+
+const SECTIONS = [
+  { value: 'all', label: 'كل الأقسام' },
+  { value: 'academy', label: 'بيانات المجمع والشاشة' },
+  { value: 'cheques', label: 'قيم بنود الشيكات' },
+  { value: 'staff', label: 'حسابات المشرفين' }
+];
 
 export async function render() {
   const [settingsRes, staffRes] = await Promise.all([api.get('/api/settings'), api.get('/api/settings/staff')]);
@@ -12,11 +20,14 @@ export async function render() {
   return {
     title: 'الإعدادات',
     subtitle: 'ضبط المنصة وقيم النقاط وحسابات المشرفين',
-    actions: `<button class="btn btn--sm btn--ghost" data-my-code>🔑 تغيير رمزي</button>`,
+    actions: `<button class="btn btn--sm btn--ghost" data-my-code>${icon('key', { size: 16 })} تغيير رمزي</button>`,
     html: `
+      <div class="toolbar">
+        ${pick({ label: 'قسم الإعدادات', attrs: 'data-section', value: view.section, options: SECTIONS, grow: true })}
+      </div>
       <div class="grid cols-2">
-        <div class="card">
-          <div class="card__head"><div><h2>بيانات المجمع</h2><p>تظهر في الشاشات والشيكات</p></div></div>
+        <div class="card" data-sec="academy">
+          <div class="card__head"><div><h2>${icon('settings')} بيانات المجمع</h2><p>تظهر في الشاشات والشيكات</p></div></div>
           <form id="academy-form">
             <div class="field"><label>اسم المجمع</label><input name="academy_name" value="${esc(s.academy_name || '')}"></div>
             <div class="field"><label>العبارة التعريفية</label><input name="academy_subtitle" value="${esc(s.academy_subtitle || '')}"></div>
@@ -52,35 +63,35 @@ export async function render() {
           <div class="divider"></div>
           <form id="logo-form">
             <div class="field"><label>شعار المجمع</label><input type="file" name="logo" accept="image/*" required></div>
-            <button class="btn btn--ghost btn--sm" type="submit">رفع الشعار</button>
+            <button class="btn btn--ghost btn--sm" type="submit">${icon('upload', { size: 16 })} رفع الشعار</button>
           </form>
         </div>
 
-        <div class="card">
-          <div class="card__head"><div><h2>قيم بنود الشيكات</h2><p>بالنقاط/الريالات</p></div></div>
+        <div class="card" data-sec="cheques">
+          <div class="card__head"><div><h2>${icon('cheque')} قيم بنود الشيكات</h2><p>بالنقاط/الريالات</p></div></div>
           <form id="cheque-form">
-            <h3 style="font-size:1rem;color:var(--blue)">شيك الحضور</h3>
+            <h3 class="section-title">${icon('cheque', { size: 18 })} شيك الحضور</h3>
             <div class="inline-fields">
               <div class="field"><label>الحضور المبكر</label><input name="cheque_attendance_early" type="number" step="5" value="${esc(s.cheque_attendance_early || 70)}"></div>
               <div class="field"><label>الحضور العام</label><input name="cheque_attendance_general" type="number" step="5" value="${esc(s.cheque_attendance_general || 50)}"></div>
             </div>
-            <h3 style="font-size:1rem;color:var(--green)">شيك تسميع الورد اليومي</h3>
+            <h3 class="section-title">${icon('cheque', { size: 18 })} شيك تسميع الورد اليومي</h3>
             <div class="inline-fields">
               <div class="field"><label>حفظ</label><input name="cheque_recitation_hifz" type="number" step="5" value="${esc(s.cheque_recitation_hifz || 25)}"></div>
               <div class="field"><label>مراجعة</label><input name="cheque_recitation_review" type="number" step="5" value="${esc(s.cheque_recitation_review || 25)}"></div>
               <div class="field"><label>حفظ ومراجعة</label><input name="cheque_recitation_both" type="number" step="5" value="${esc(s.cheque_recitation_both || 50)}"></div>
             </div>
-            <h3 style="font-size:1rem;color:var(--orange)">شيك الانضباط والأخلاق</h3>
+            <h3 class="section-title">${icon('cheque', { size: 18 })} شيك الانضباط والأخلاق</h3>
             <div class="field"><label>قيمة الشيك</label><input name="cheque_discipline" type="number" step="5" value="${esc(s.cheque_discipline || 25)}"></div>
             <button class="btn" type="submit">حفظ القيم</button>
           </form>
         </div>
       </div>
 
-      <div class="card mt">
+      <div class="card mt" data-sec="staff">
         <div class="card__head">
-          <div><h2>حسابات المشرفين</h2><p>من يستطيع الرصد وإصدار الشيكات</p></div>
-          <button class="btn btn--sm" data-add-staff>➕ حساب جديد</button>
+          <div><h2>${icon('groups')} حسابات المشرفين</h2><p>من يستطيع الرصد وإصدار الشيكات</p></div>
+          <button class="btn btn--sm" data-add-staff>${icon('plus', { size: 16 })} حساب جديد</button>
         </div>
         <div class="table-wrap">
           <table>
@@ -94,10 +105,18 @@ export async function render() {
                   <td>${user.active
       ? (user.must_change_code ? '<span class="chip chip--orange">لم يغيّر الرمز</span>' : '<span class="chip chip--green">نشط</span>')
       : '<span class="chip chip--gray">معطل</span>'}</td>
-                  <td class="row" style="gap:.3rem">
-                    <button class="btn btn--sm btn--ghost" data-reset="${user.id}">إعادة الرمز</button>
-                    <button class="btn btn--sm btn--ghost" data-toggle="${user.id}" data-active="${user.active}">${user.active ? 'تعطيل' : 'تفعيل'}</button>
-                  </td>
+                  <td>${menu({
+    name: 'more', label: '', className: 'btn btn--sm btn--ghost btn--icon',
+    items: [
+      menuItem({ label: 'إعادة الرمز المؤقت', name: 'key', attrs: `data-reset="${user.id}"` }),
+      menuItem({
+        label: user.active ? 'تعطيل الحساب' : 'تفعيل الحساب',
+        name: user.active ? 'lock' : 'check',
+        danger: Boolean(user.active),
+        attrs: `data-toggle="${user.id}" data-active="${user.active}"`
+      })
+    ]
+  })}</td>
                 </tr>`).join('')}
             </tbody>
           </table>
@@ -107,6 +126,17 @@ export async function render() {
 }
 
 export function mount({ content, refresh }) {
+  // قائمة منسدلة تعرض قسماً واحداً من الإعدادات لتبسيط الشاشة
+  const sectionSelect = content.querySelector('[data-section]');
+  const applySection = () => {
+    view.section = sectionSelect.value;
+    content.querySelectorAll('[data-sec]').forEach((box) => {
+      box.hidden = view.section !== 'all' && box.dataset.sec !== view.section;
+    });
+  };
+  sectionSelect.onchange = applySection;
+  applySection();
+
   const save = async (form) => {
     try {
       await api.patch('/api/settings', formValues(form));

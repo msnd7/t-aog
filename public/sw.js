@@ -1,12 +1,13 @@
 /* عامل الخدمة: يتيح تثبيت المنصة كتطبيق وتشغيل الواجهة دون اتصال */
-const CACHE = 'riyad-shell-v2';
+const CACHE = 'riyad-shell-v3';
 const SHELL = [
-  '/', '/index.html', '/screen.html', '/print.html', '/cards.html', '/offline.html',
+  '/', '/index.html', '/screen.html', '/print.html', '/cards.html', '/blank.html', '/offline.html',
   '/css/app.css', '/css/screen.css', '/css/print.css', '/css/cards.css', '/css/fonts.css',
   '/fonts/ibm-plex-sans-arabic-400-arabic.woff2', '/fonts/ibm-plex-sans-arabic-500-arabic.woff2',
   '/fonts/ibm-plex-sans-arabic-600-arabic.woff2', '/fonts/ibm-plex-sans-arabic-700-arabic.woff2',
   '/fonts/ibm-plex-sans-arabic-400-latin.woff2', '/fonts/ibm-plex-sans-arabic-600-latin.woff2',
-  '/js/app.js', '/js/api.js', '/js/ui.js', '/js/barcode.js', '/js/student-card.js', '/js/screen.js', '/js/print.js', '/js/cards.js',
+  '/js/app.js', '/js/api.js', '/js/ui.js', '/js/icons.js', '/js/barcode.js', '/js/student-card.js',
+  '/js/screen.js', '/js/print.js', '/js/cards.js', '/js/blank.js',
   '/js/views/shared.js', '/js/views/dashboard.js', '/js/views/students.js', '/js/views/student-profile.js',
   '/js/views/halaqat.js', '/js/views/cheques.js', '/js/views/scan.js', '/js/views/store.js',
   '/js/views/leaderboard.js', '/js/views/settings.js', '/js/views/my-page.js', '/js/views/my-orders.js',

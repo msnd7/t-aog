@@ -1,5 +1,6 @@
 /** بطاقة الطالب: تصميم موحّد للباركود في التطبيق وفي الطباعة */
 import { drawBarcode } from './barcode.js';
+import { icon } from './icons.js';
 
 const esc = (value) => String(value ?? '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -78,7 +79,7 @@ export function openScanMode(student) {
   const layer = document.createElement('div');
   layer.className = 'scan-mode';
   layer.innerHTML = `
-    <button class="scan-mode__close" type="button" aria-label="إغلاق">✕</button>
+    <button class="scan-mode__close" type="button" aria-label="إغلاق">${icon('close', { size: 20 })}</button>
     <div class="scan-mode__inner">
       <div class="scan-mode__name">${esc(student.name)}</div>
       <div class="scan-mode__halaqa">${esc(student.halaqa_name || '')}</div>

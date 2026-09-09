@@ -300,6 +300,27 @@ CREATE TABLE IF NOT EXISTS cheques (
   printed_at   TEXT
 );
 
+-- دفاتر الشيكات الفارغة: تُطبع بكميات كبيرة بنوع وقيمة محددة، ويكتب المعلم
+-- اسم الطالب ويوقّع عليها، ثم يُصرف الشيك بمسح باركوده مع بطاقة الطالب.
+CREATE TABLE IF NOT EXISTS cheque_vouchers (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  code        TEXT NOT NULL UNIQUE,
+  batch       TEXT NOT NULL,
+  type        TEXT NOT NULL,
+  item_key    TEXT NOT NULL,
+  item_label  TEXT NOT NULL,
+  points      INTEGER NOT NULL,
+  note        TEXT,
+  created_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at  TEXT NOT NULL,
+  printed_at  TEXT,
+  student_id  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  redeemed_at TEXT,
+  redeemed_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_vouchers_batch ON cheque_vouchers(batch);
+CREATE INDEX IF NOT EXISTS idx_vouchers_student ON cheque_vouchers(student_id);
+
 CREATE TABLE IF NOT EXISTS point_entries (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   student_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -412,6 +433,25 @@ CREATE TABLE IF NOT EXISTS cheques (
   issued_at    TEXT NOT NULL,
   printed_at   TEXT
 );
+
+CREATE TABLE IF NOT EXISTS cheque_vouchers (
+  id          SERIAL PRIMARY KEY,
+  code        TEXT NOT NULL UNIQUE,
+  batch       TEXT NOT NULL,
+  type        TEXT NOT NULL,
+  item_key    TEXT NOT NULL,
+  item_label  TEXT NOT NULL,
+  points      INTEGER NOT NULL,
+  note        TEXT,
+  created_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at  TEXT NOT NULL,
+  printed_at  TEXT,
+  student_id  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  redeemed_at TEXT,
+  redeemed_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_vouchers_batch ON cheque_vouchers(batch);
+CREATE INDEX IF NOT EXISTS idx_vouchers_student ON cheque_vouchers(student_id);
 
 CREATE TABLE IF NOT EXISTS point_entries (
   id         SERIAL PRIMARY KEY,

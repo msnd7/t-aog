@@ -1,6 +1,9 @@
 /** شاشة الأفراد: قائمة الطلاب، إضافة، نقاط، شيكات وبطاقات الباركود */
 import { api } from '../api.js';
-import { esc, num, avatar, rankBadge, emptyState, modal, formValues, ok, fail, periodTabs, confirmDialog } from '../ui.js';
+import {
+  esc, num, avatar, rankBadge, emptyState, modal, formValues, ok, fail, confirmDialog,
+  icon, pick, searchPick, periodPick, menu, menuItem, menuSep
+} from '../ui.js';
 import { awardPointsModal, printCards, printCheques } from './shared.js';
 
 const view = { period: 'week', halaqa: '', query: '' };
@@ -18,37 +21,58 @@ export async function render() {
   return {
     title: 'الأفراد',
     subtitle: `${num(data.students.length)} طالباً`,
-    actions: `
-      <button class="btn btn--sm" data-add>➕ طالب جديد</button>
-      <button class="btn btn--sm btn--ghost" data-bulk>📋 إضافة دفعة</button>`,
+    actions: menu({
+      label: 'إجراءات',
+      name: 'plus',
+      className: 'btn btn--sm',
+      items: [
+        menuItem({ label: 'طالب جديد', name: 'user', attrs: 'data-add' }),
+        menuItem({ label: 'إضافة دفعة أسماء', name: 'list', attrs: 'data-bulk' }),
+        menuSep(),
+        menuItem({ label: 'طباعة بطاقات الباركود', name: 'barcode', attrs: 'data-cards' })
+      ]
+    }),
     html: `
-      <div class="card">
-        <div class="row between" style="margin-bottom:.6rem">
-          ${periodTabs(view.period)}
-          <div class="row">
-            <select data-halaqa style="min-height:40px;border-radius:12px;border:1px solid var(--line);padding:0 .6rem">
-              <option value="">كل الحلقات</option>
-              ${data.halaqat.map((h) => `<option value="${h.id}" ${String(view.halaqa) === String(h.id) ? 'selected' : ''}>${esc(h.name)}</option>`).join('')}
-            </select>
-            <input data-search value="${esc(view.query)}" placeholder="بحث بالاسم أو الجوال أو الباركود"
-                   style="min-height:40px;border-radius:12px;border:1px solid var(--line);padding:0 .7rem">
-          </div>
-        </div>
+      <div class="toolbar">
+        ${periodPick(view.period)}
+        ${pick({
+    label: 'الحلقة',
+    attrs: 'data-halaqa',
+    value: view.halaqa,
+    options: [{ value: '', label: 'كل الحلقات' }, ...data.halaqat.map((h) => ({ value: String(h.id), label: h.name }))]
+  })}
+        ${searchPick({
+    label: 'بحث',
+    attrs: 'data-search',
+    value: view.query,
+    placeholder: 'الاسم أو الجوال أو الباركود'
+  })}
+      </div>
 
-        <div class="row" style="margin-bottom:.6rem">
-          <label class="switch"><input type="checkbox" data-all> تحديد الكل</label>
-          <span class="chip" data-count>${selected.size} محدد</span>
-          <span class="spacer"></span>
-          <button class="btn btn--sm btn--green" data-award ${selected.size ? '' : 'disabled'}>➕ نقاط للمحددين</button>
-          <button class="btn btn--sm" data-cheque ${selected.size ? '' : 'disabled'}>🧾 شيك للمحددين</button>
-          <button class="btn btn--sm btn--ghost" data-cards>🖨️ طباعة بطاقات الباركود</button>
+      <div class="card">
+        <div class="row between" style="margin-bottom:.7rem">
+          <div class="row">
+            <label class="switch"><input type="checkbox" data-all> تحديد الكل</label>
+            <span class="chip" data-count>${selected.size} محدد</span>
+          </div>
+          ${menu({
+    label: 'إجراءات المحدد',
+    name: 'check',
+    className: 'btn btn--sm btn--ghost',
+    items: [
+      menuItem({ label: 'إضافة نقاط', name: 'points', attrs: 'data-award' }),
+      menuItem({ label: 'إصدار شيك باسمهم', name: 'cheque', attrs: 'data-cheque' }),
+      menuSep(),
+      menuItem({ label: 'طباعة بطاقات المحددين', name: 'barcode', attrs: 'data-cards-selected' })
+    ]
+  })}
         </div>
 
         <div class="table-wrap">
           <table>
             <thead>
               <tr>
-                <th style="width:40px"></th>
+                <th style="width:38px"></th>
                 <th style="width:44px">#</th>
                 <th>الطالب</th>
                 <th>رقم الجوال</th>
@@ -56,7 +80,7 @@ export async function render() {
                 <th class="num">نقاط الفترة</th>
                 <th class="num">الرصيد</th>
                 <th class="num">الإجمالي</th>
-                <th style="width:180px">إجراءات</th>
+                <th style="width:56px"></th>
               </tr>
             </thead>
             <tbody>
@@ -67,7 +91,7 @@ export async function render() {
                   <td>
                     <a class="person" href="#/students/${student.id}" style="text-decoration:none;color:inherit">
                       ${avatar(student)}
-                      <span><strong>${esc(student.name)}</strong><span>${esc(student.barcode || '')}</span></span>
+                      <span><strong>${esc(student.name)}</strong><span dir="ltr">${esc(student.barcode || '')}</span></span>
                     </a>
                   </td>
                   <td dir="ltr" style="text-align:right">${esc(student.phone || '—')}</td>
@@ -75,30 +99,31 @@ export async function render() {
                   <td class="num"><span class="points-pill">${num(student.period_points)}</span></td>
                   <td class="num">${num(student.balance)}</td>
                   <td class="num muted">${num(student.earned)}</td>
-                  <td>
-                    <button class="btn btn--sm btn--green" data-quick-award="${student.id}">نقاط</button>
-                    <button class="btn btn--sm btn--ghost" data-quick-cheque="${student.id}">شيك</button>
-                  </td>
+                  <td>${menu({
+    name: 'more', label: '', className: 'btn btn--sm btn--ghost btn--icon',
+    items: [
+      menuItem({ label: 'إضافة نقاط', name: 'points', attrs: `data-quick-award="${student.id}"` }),
+      menuItem({ label: 'إصدار شيك', name: 'cheque', attrs: `data-quick-cheque="${student.id}"` }),
+      menuItem({ label: 'طباعة البطاقة', name: 'barcode', attrs: `data-quick-card="${student.id}"` }),
+      menuSep(),
+      menuItem({ label: 'ملف الطالب', name: 'user', href: `#/students/${student.id}` })
+    ]
+  })}</td>
                 </tr>`).join('')}
             </tbody>
           </table>
         </div>
-        ${data.students.length ? '' : emptyState('لا يوجد طلاب بعد. ابدأ بإضافة طالب أو دفعة أسماء.', '🎓')}
+        ${data.students.length ? '' : emptyState('لا يوجد طلاب بعد. ابدأ بإضافة طالب أو دفعة أسماء.', 'students')}
       </div>`
   };
 }
 
 export function mount({ content, refresh }) {
   const countChip = content.querySelector('[data-count]');
-  const syncButtons = () => {
-    countChip.textContent = `${selected.size} محدد`;
-    content.querySelector('[data-award]').disabled = !selected.size;
-    content.querySelector('[data-cheque]').disabled = !selected.size;
-  };
+  const syncButtons = () => { countChip.textContent = `${selected.size} محدد`; };
 
-  content.querySelectorAll('[data-period]').forEach((button) => {
-    button.onclick = () => { view.period = button.dataset.period; refresh(); };
-  });
+  const periodSelect = content.querySelector('[data-period-select]');
+  periodSelect.onchange = () => { view.period = periodSelect.value; refresh(); };
   content.querySelector('[data-halaqa]').onchange = (event) => { view.halaqa = event.target.value; refresh(); };
 
   const search = content.querySelector('[data-search]');
@@ -129,12 +154,24 @@ export function mount({ content, refresh }) {
   };
 
   const pickedStudents = () => data.students.filter((s) => selected.has(s.id));
+  const needSelection = () => {
+    if (selected.size) return false;
+    fail('اختر طالباً واحداً على الأقل');
+    return true;
+  };
 
-  content.querySelector('[data-award]').onclick = () =>
+  content.querySelector('[data-award]').onclick = () => {
+    if (needSelection()) return;
     awardPointsModal({ students: pickedStudents(), onDone: refresh });
-  content.querySelector('[data-cheque]').onclick = () => chequeModal(pickedStudents(), refresh);
-  content.querySelector('[data-cards]').onclick = () =>
-    printCards({ halaqaId: view.halaqa || null, studentIds: selected.size ? [...selected] : [] });
+  };
+  content.querySelector('[data-cheque]').onclick = () => {
+    if (needSelection()) return;
+    chequeModal(pickedStudents(), refresh);
+  };
+  content.querySelector('[data-cards-selected]').onclick = () => {
+    if (needSelection()) return;
+    cardsModal({ studentIds: [...selected] });
+  };
 
   content.querySelectorAll('[data-quick-award]').forEach((button) => {
     button.onclick = () => {
@@ -148,37 +185,67 @@ export function mount({ content, refresh }) {
       chequeModal([student], refresh);
     };
   });
+  content.querySelectorAll('[data-quick-card]').forEach((button) => {
+    button.onclick = () => cardsModal({ studentIds: [Number(button.dataset.quickCard)] });
+  });
 
   document.querySelector('[data-add]').onclick = () => addStudentModal(data.halaqat, refresh);
   document.querySelector('[data-bulk]').onclick = () => bulkModal(data.halaqat, refresh);
+  document.querySelector('[data-cards]').onclick = () => cardsModal({
+    halaqaId: view.halaqa || null,
+    studentIds: selected.size ? [...selected] : []
+  });
 }
 
-/** إصدار شيك سريع من شاشة الأفراد */
+/** اختيار كثافة صفحة الباركودات قبل الطباعة */
+export function cardsModal({ halaqaId = null, studentIds = [] } = {}) {
+  modal({
+    title: 'طباعة بطاقات الباركود',
+    render: () => `
+      <form id="cards-form">
+        ${pick({
+    label: 'شكل الطباعة',
+    attrs: 'name="layout"',
+    value: 'label',
+    options: [
+      { value: 'label', label: 'ملصقات متوسطة — ٢٤ باركود في الصفحة' },
+      { value: 'mini', label: 'ملصقات مصغّرة — ٤٠ باركود في الصفحة' },
+      { value: 'card', label: 'بطاقات كاملة بالصورة — ١٠ في الصفحة' }
+    ]
+  })}
+        <p class="muted small mt">${icon('info', { size: 16 })}
+          الملصقات تطبع أكبر عدد ممكن في الصفحة الواحدة لتسهيل القص والتوزيع،
+          والبطاقات الكاملة بمقاس البطاقة البنكية وفيها صورة الطالب.</p>
+        <button class="btn btn--block mt" type="submit">${icon('print', { size: 18 })} فتح صفحة الطباعة</button>
+      </form>`,
+    onMount: (root, close) => {
+      root.querySelector('#cards-form').onsubmit = (event) => {
+        event.preventDefault();
+        printCards({ halaqaId, studentIds, layout: formValues(event.target).layout });
+        close();
+      };
+    }
+  });
+}
+
+/** إصدار شيك سريع باسم طالب أو مجموعة طلاب */
 export async function chequeModal(students, onDone) {
   if (!students.length) return fail('اختر طالباً واحداً على الأقل');
-  const { catalog, currency } = await api.get('/api/cheques/catalog');
-  const types = Object.values(catalog);
-  let activeType = types[0].key;
-  let activeItems = [types[0].items[0].key];
+  const { options, currency } = await api.get('/api/cheques/vouchers/options');
+  let active = options[0].value;
+  const find = (value) => options.find((one) => one.value === value) || options[0];
 
   modal({
     title: `إصدار شيك لـ ${students.length === 1 ? students[0].name : `${students.length} طلاب`}`,
-    wide: true,
     render: () => `
-      <div class="grid cols-3" data-types>
-        ${types.map((type) => `
-          <button type="button" class="cheque-type ${type.key === activeType ? 'active' : ''}" data-type="${type.key}">
-            <h3>${esc(type.title)}</h3>
-            <div class="items">${type.items.map((item) => `<span class="chip chip--gray">${esc(item.label)} · ${item.points}</span>`).join('')}</div>
-          </button>`).join('')}
-      </div>
-      <div class="divider"></div>
-      <div class="field">
-        <label>بنود الشيك</label>
-        <div class="row" data-items></div>
-      </div>
       <form id="cheque-form">
-        <div class="inline-fields">
+        ${pick({
+    label: 'نوع الشيك وبنده',
+    attrs: 'name="option" data-option',
+    value: active,
+    options: options.map((one) => ({ value: one.value, label: `${one.title} · ${one.points} ${currency}` }))
+  })}
+        <div class="inline-fields mt">
           <div class="field">
             <label>اسم المعلم (للتوقيع)</label>
             <input name="teacher_name" placeholder="يُترك فارغاً لاستخدام معلم الحلقة">
@@ -192,35 +259,19 @@ export async function chequeModal(students, onDone) {
           <strong data-total></strong>
           <div class="row">
             <button class="btn btn--ghost" type="submit" data-save-only>حفظ بدون طباعة</button>
-            <button class="btn" type="submit" data-print>🖨️ إصدار وطباعة</button>
+            <button class="btn" type="submit" data-print>${icon('print', { size: 18 })} إصدار وطباعة</button>
           </div>
         </div>
       </form>`,
     onMount: (root, close) => {
-      const itemsBox = root.querySelector('[data-items]');
+      const select = root.querySelector('[data-option]');
       const totalBox = root.querySelector('[data-total]');
-      const drawItems = () => {
-        const type = catalog[activeType];
-        itemsBox.innerHTML = type.items.map((item) => `
-          <label class="option ${activeItems.includes(item.key) ? 'active' : ''}">
-            <input type="radio" name="item" value="${item.key}" ${activeItems.includes(item.key) ? 'checked' : ''}>
-            ${esc(item.label)} — ${item.points} ${esc(currency)}
-          </label>`).join('');
-        itemsBox.querySelectorAll('input[name=item]').forEach((input) => {
-          input.onchange = () => { activeItems = [input.value]; drawItems(); };
-        });
-        const total = type.items.filter((i) => activeItems.includes(i.key)).reduce((sum, i) => sum + i.points, 0);
-        totalBox.textContent = `قيمة الشيك: ${total} ${currency} × ${students.length} = ${total * students.length}`;
+      const updateTotal = () => {
+        const option = find(select.value);
+        totalBox.textContent = `قيمة الشيك: ${option.points} ${currency} × ${students.length} = ${option.points * students.length}`;
       };
-      root.querySelectorAll('[data-type]').forEach((button) => {
-        button.onclick = () => {
-          activeType = button.dataset.type;
-          activeItems = [catalog[activeType].items[0].key];
-          root.querySelectorAll('[data-type]').forEach((b) => b.classList.toggle('active', b === button));
-          drawItems();
-        };
-      });
-      drawItems();
+      select.onchange = () => { active = select.value; updateTotal(); };
+      updateTotal();
 
       let printAfter = true;
       root.querySelector('[data-save-only]').onclick = () => { printAfter = false; };
@@ -228,10 +279,11 @@ export async function chequeModal(students, onDone) {
       root.querySelector('#cheque-form').onsubmit = async (event) => {
         event.preventDefault();
         const values = formValues(event.target);
+        const option = find(select.value);
         try {
           const result = await api.post('/api/cheques', {
-            type: activeType,
-            items: activeItems,
+            type: option.type,
+            items: [option.item],
             student_ids: students.map((s) => s.id),
             teacher_name: values.teacher_name,
             note: values.note
@@ -327,7 +379,7 @@ function bulkModal(halaqat, onDone) {
             fail(`تم تجاوز ${result.skipped.length} سطراً: ${result.skipped[0].reason}`);
           }
           if (await confirmDialog('هل تريد طباعة بطاقات الباركود للطلاب الجدد؟', { confirmText: 'طباعة', danger: false })) {
-            printCards({ studentIds: result.created.map((s) => s.id) });
+            cardsModal({ studentIds: result.created.map((s) => s.id) });
           }
           if (onDone) onDone();
         } catch (error) { fail(error.message); }

@@ -1,6 +1,6 @@
 /** الشاشة الرئيسية للمشرف */
 import { api } from '../api.js';
-import { esc, num, nb, avatar, rankBadge, dateAr, emptyState } from '../ui.js';
+import { esc, num, nb, avatar, rankBadge, dateAr, emptyState, icon } from '../ui.js';
 
 let cache = null;
 
@@ -22,27 +22,27 @@ export async function render() {
     title: 'لوحة المشرف',
     subtitle: `${screen.period_label} · ${esc(screen.academy.name)}`,
     actions: `
-      <a class="btn btn--sm" href="#/scan">📷 مسح الباركود</a>
-      <a class="btn btn--sm btn--ghost" href="#/cheques">🧾 إصدار شيك</a>`,
+      <a class="btn btn--sm" href="#/scan">${icon('scan', { size: 16 })} مسح الباركود</a>
+      <a class="btn btn--sm btn--ghost" href="#/cheques">${icon('cheque', { size: 16 })} طباعة شيكات</a>`,
     html: `
       <div class="grid cols-4">
         <div class="stat stat--blue">
-          <span class="stat__label">عدد الطلاب</span>
+          <span class="stat__label">${icon('students', { size: 16 })} عدد الطلاب</span>
           <span class="stat__value">${num(students.students.length)}</span>
           <span class="stat__hint">في ${nb(screen.halaqat.length)} حلقات</span>
         </div>
         <div class="stat stat--green">
-          <span class="stat__label">نقاط ${screen.period_label}</span>
+          <span class="stat__label">${icon('points', { size: 16 })} نقاط ${screen.period_label}</span>
           <span class="stat__value">${num(totalWeek)}</span>
           <span class="stat__hint">مجموع نقاط الحلقات</span>
         </div>
         <div class="stat stat--orange">
-          <span class="stat__label">طلبات المتجر</span>
+          <span class="stat__label">${icon('gift', { size: 16 })} طلبات المتجر</span>
           <span class="stat__value">${num(redemptions.redemptions.length)}</span>
           <span class="stat__hint">بانتظار التسليم</span>
         </div>
         <div class="stat stat--gold">
-          <span class="stat__label">فارس الأسبوع</span>
+          <span class="stat__label">${icon('medal', { size: 16 })} فارس الأسبوع</span>
           <span class="stat__value" style="font-size:1.25rem">${esc(knight ? knight.name : '—')}</span>
           <span class="stat__hint">${knight ? `${nb(knight.points)} نقطة` : 'لا توجد نقاط بعد'}</span>
         </div>
@@ -50,7 +50,7 @@ export async function render() {
 
       <div class="grid cols-2 mt">
         <div class="hero hero--gold">
-          <h2>🏅 فارس الأسبوع</h2>
+          <h2>${icon('medal', { size: 20 })} فارس الأسبوع</h2>
           ${knight ? `
             <div class="hero__body">
               ${avatar(knight, 'avatar--lg')}
@@ -62,7 +62,7 @@ export async function render() {
             </div>` : `<p class="meta">لم تُرصد نقاط لهذا الأسبوع بعد</p>`}
         </div>
         <div class="hero hero--green">
-          <h2>🕌 حلقة الأسبوع</h2>
+          <h2>${icon('mosque', { size: 20 })} حلقة الأسبوع</h2>
           ${halaqa ? `
             <div class="hero__body">
               <div>
@@ -77,7 +77,7 @@ export async function render() {
       <div class="grid cols-2 mt">
         <div class="card">
           <div class="card__head">
-            <div><h2>الأكثر نقاطاً هذا الأسبوع</h2><p>أعلى ١٠ طلاب</p></div>
+            <div><h2>${icon('trophy')} الأكثر نقاطاً هذا الأسبوع</h2><p>أعلى ١٠ طلاب</p></div>
             <a class="btn btn--ghost btn--sm" href="#/leaderboard">كل الصدارة</a>
           </div>
           ${screen.students.length ? `
@@ -92,12 +92,12 @@ export async function render() {
                   </div>
                   <span class="points-pill">${num(student.points)}</span>
                 </a>`).join('')}
-            </div>` : emptyState('لا توجد نقاط مرصودة بعد', '🏆')}
+            </div>` : emptyState('لا توجد نقاط مرصودة بعد', 'trophy')}
         </div>
 
         <div class="card">
           <div class="card__head">
-            <div><h2>آخر الحركات</h2><p>أحدث النقاط المرصودة</p></div>
+            <div><h2>${icon('list')} آخر الحركات</h2><p>أحدث النقاط المرصودة</p></div>
           </div>
           ${entries.entries.length ? `
             <div class="list">
@@ -109,14 +109,14 @@ export async function render() {
                   </div>
                   <span class="points-pill ${entry.points < 0 ? 'points-pill--minus' : ''}">${entry.points > 0 ? '+' : ''}${num(entry.points)}</span>
                 </div>`).join('')}
-            </div>` : emptyState('لم تُرصد أي نقاط بعد', '📋')}
+            </div>` : emptyState('لم تُرصد أي نقاط بعد', 'list')}
         </div>
       </div>
 
       ${redemptions.redemptions.length ? `
         <div class="card mt">
           <div class="card__head">
-            <div><h2>طلبات بانتظار التسليم</h2><p>من المتجر</p></div>
+            <div><h2>${icon('box')} طلبات بانتظار التسليم</h2><p>من المتجر</p></div>
             <a class="btn btn--ghost btn--sm" href="#/store">إدارة المتجر</a>
           </div>
           <div class="list">

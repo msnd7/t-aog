@@ -1,6 +1,6 @@
 /** نواة التطبيق: تسجيل الدخول، القوائم، والتوجيه بين الشاشات */
 import { api } from './api.js';
-import { esc, fail, ok, spinner } from './ui.js';
+import { esc, fail, ok, spinner, icon, menu, menuItem, menuSep } from './ui.js';
 
 import * as dashboard from './views/dashboard.js';
 import * as students from './views/students.js';
@@ -17,21 +17,21 @@ import * as myOrders from './views/my-orders.js';
 export const state = { user: null, settings: {}, catalog: {} };
 
 const STAFF_NAV = [
-  { path: '/', icon: '🏠', label: 'الرئيسية' },
-  { path: '/students', icon: '🎓', label: 'الأفراد' },
-  { path: '/halaqat', icon: '👥', label: 'المجموعات' },
-  { path: '/cheques', icon: '🧾', label: 'الشيكات' },
-  { path: '/scan', icon: '📷', label: 'المسح' },
-  { path: '/store', icon: '🎁', label: 'المتجر' },
-  { path: '/leaderboard', icon: '🏆', label: 'الصدارة' },
-  { path: '/settings', icon: '⚙️', label: 'الإعدادات', adminOnly: true }
+  { path: '/', icon: 'home', label: 'الرئيسية', group: 'المتابعة' },
+  { path: '/scan', icon: 'scan', label: 'المسح', group: 'الرصد' },
+  { path: '/cheques', icon: 'cheque', label: 'الشيكات' },
+  { path: '/students', icon: 'students', label: 'الأفراد', group: 'الإدارة' },
+  { path: '/halaqat', icon: 'groups', label: 'المجموعات' },
+  { path: '/store', icon: 'gift', label: 'المتجر' },
+  { path: '/leaderboard', icon: 'trophy', label: 'الصدارة' },
+  { path: '/settings', icon: 'settings', label: 'الإعدادات', adminOnly: true }
 ];
 
 const STUDENT_NAV = [
-  { path: '/', icon: '🏠', label: 'صفحتي' },
-  { path: '/leaderboard', icon: '🏆', label: 'الصدارة' },
-  { path: '/store', icon: '🎁', label: 'المتجر' },
-  { path: '/orders', icon: '📦', label: 'طلباتي' }
+  { path: '/', icon: 'home', label: 'صفحتي' },
+  { path: '/leaderboard', icon: 'trophy', label: 'الصدارة' },
+  { path: '/store', icon: 'gift', label: 'المتجر' },
+  { path: '/orders', icon: 'box', label: 'طلباتي' }
 ];
 
 const ROUTES = [
@@ -95,7 +95,7 @@ function loginScreen() {
         </form>
 
         <div class="divider"></div>
-        <a class="btn btn--ghost btn--block" href="/screen.html">📺 فتح شاشة العرض</a>
+        <a class="btn btn--ghost btn--block" href="/screen.html">${icon('screen', { size: 18 })} فتح شاشة العرض</a>
       </div>
     </div>`;
 
@@ -223,11 +223,15 @@ function navItems() {
 }
 
 function navMarkup(path, className) {
-  return navItems().map((item) => `
+  const isSidebar = className === 'nav';
+  const links = navItems().map((item) => `
+    ${isSidebar && item.group ? `<span class="nav__label">${esc(item.group)}</span>` : ''}
     <a class="${item.path === path ? 'active' : ''}" href="#${item.path}">
-      <span class="ic">${item.icon}</span><span>${esc(item.label)}</span>
-    </a>`).join('') + (className === 'nav'
-      ? `<a href="/screen.html" target="_blank" rel="noopener"><span class="ic">📺</span><span>شاشة العرض</span></a>` : '');
+      ${icon(item.icon)}<span>${esc(item.label)}</span>
+    </a>`).join('');
+  return links + (isSidebar
+    ? `<span class="nav__label">أدوات</span>
+       <a href="/screen.html" target="_blank" rel="noopener">${icon('screen')}<span>شاشة العرض</span></a>` : '');
 }
 
 function layout(path) {
@@ -245,30 +249,48 @@ function layout(path) {
         <nav class="nav">${navMarkup(path, 'nav')}</nav>
         <div class="sidebar__foot">
           <div class="sidebar__user">
-            <span class="avatar" style="background:#fff">${esc((state.user.name || '?')[0])}</span>
+            <span class="avatar">${esc((state.user.name || '?')[0])}</span>
             <div>
               <strong>${esc(state.user.name)}</strong><br>
               <span style="opacity:.75">${roleLabel(state.user.role)}</span>
             </div>
           </div>
-          <button class="btn btn--ghost btn--sm btn--block" id="logout">تسجيل الخروج</button>
+          <button class="btn btn--ghost btn--sm btn--block" id="logout">${icon('logout', { size: 16 })} تسجيل الخروج</button>
         </div>
       </aside>
       <main class="main">
         <header class="topbar">
           <div class="topbar__title"><h1 id="page-title">…</h1><p id="page-subtitle"></p></div>
-          <div class="topbar__actions" id="page-actions"></div>
+          <div class="topbar__actions">
+            <span id="page-actions" class="row" style="gap:.45rem"></span>
+            ${menu({
+    name: 'user',
+    label: '',
+    className: 'btn btn--sm btn--ghost',
+    items: [
+      menuItem({ label: esc(state.user.name), name: 'user', attrs: 'disabled style="opacity:.7"' }),
+      menuSep(),
+      menuItem({ label: 'تغيير رمز الدخول', name: 'key', attrs: 'data-menu-code' }),
+      menuItem({ label: 'شاشة العرض', name: 'screen', href: '/screen.html', target: '_blank' }),
+      menuSep(),
+      menuItem({ label: 'تسجيل الخروج', name: 'logout', danger: true, attrs: 'data-menu-logout' })
+    ]
+  })}
+          </div>
         </header>
         <div class="content" id="content">${spinner()}</div>
       </main>
       <nav class="mobile-nav">${navMarkup(path, 'mobile')}</nav>
     </div>`;
-  root.querySelector('#logout').addEventListener('click', async () => {
+  const logout = async () => {
     await api.logout();
     state.user = null;
     window.location.hash = '';
     renderApp();
-  });
+  };
+  root.querySelector('#logout').addEventListener('click', logout);
+  root.querySelector('[data-menu-logout]').addEventListener('click', logout);
+  root.querySelector('[data-menu-code]').addEventListener('click', () => settingsView.changeMyCodeModal());
 }
 
 function roleLabel(role) {
@@ -289,11 +311,11 @@ async function renderRoute() {
 
   const match = ROUTES.find((route) => route.pattern.test(path));
   if (!match) {
-    content.innerHTML = `<div class="card"><div class="empty"><span class="ic">🧭</span>الصفحة غير موجودة</div></div>`;
+    content.innerHTML = `<div class="card"><div class="empty">${icon('compass', { size: 40, stroke: 1.3 })}الصفحة غير موجودة</div></div>`;
     return;
   }
   if ((match.staff && !ctx.isStaff) || (match.admin && !ctx.isAdmin)) {
-    content.innerHTML = `<div class="card"><div class="empty"><span class="ic">🔒</span>لا تملك صلاحية الدخول لهذه الصفحة</div></div>`;
+    content.innerHTML = `<div class="card"><div class="empty">${icon('lock', { size: 40, stroke: 1.3 })}لا تملك صلاحية الدخول لهذه الصفحة</div></div>`;
     return;
   }
 
@@ -315,7 +337,7 @@ async function renderRoute() {
       state.user = { ...state.user, must_change_code: true };
       return renderApp();
     }
-    content.innerHTML = `<div class="card"><div class="empty"><span class="ic">⚠️</span>${esc(error.message)}</div></div>`;
+    content.innerHTML = `<div class="card"><div class="empty">${icon('warning', { size: 40, stroke: 1.3 })}${esc(error.message)}</div></div>`;
   }
 }
 
