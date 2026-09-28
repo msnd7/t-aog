@@ -550,11 +550,50 @@ async function initSchema() {
   await seedDefaultSettings();
 }
 
-/** يُحل بعد اكتمال تجهيز المخطط والإعدادات الافتراضية؛ كل استعلام عام ينتظره أولاً. */
-const schemaReady = initSchema().catch((err) => {
-  console.error('تعذّر تجهيز مخطط قاعدة البيانات:', err);
-  throw err;
-});
+/**
+ * يُحل بعد اكتمال تجهيز المخطط والإعدادات الافتراضية؛ كل استعلام عام ينتظره أولاً.
+ * إن فشل التجهيز (كأن تكون قاعدة Neon نائمة فينقطع أول اتصال وهي تستيقظ) يُنسى الوعد
+ * الفاشل ويُعاد المحاولة مع الطلب التالي، بدل أن يبقى الخطأ محفوظاً في الدالة الدافئة
+ * فتفشل كل الطلبات بعده إلى أن يُعاد النشر.
+ */
+let schemaPromise = null;
+function schemaReady() {
+  if (!schemaPromise) {
+    schemaPromise = withRetry(initSchema).catch((err) => {
+      console.error('تعذّر تجهيز مخطط قاعدة البيانات:', err);
+      schemaPromise = null;
+      throw err;
+    });
+  }
+  return schemaPromise;
+}
+schemaReady().catch(() => {});
+
+/** أخطاء الاتصال العابرة (استيقاظ القاعدة من الخمول) تُعاد محاولتها بدل أن تُرجع 500. */
+function isTransient(err) {
+  const msg = String((err && (err.message || err[Symbol.for('kMessage')])) || err || '');
+  const code = err && (err.code || (err.error && err.error.code));
+  return /socket hang up|ECONNRESET|ETIMEDOUT|ECONNREFUSED|Connection terminated|closed|WebSocket/i.test(msg)
+    || ['ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED', '57P01', '08006', '08001'].includes(code)
+    || (err && err.type === 'error' && err.target); // ErrorEvent من ws
+}
+
+async function withRetry(fn, attempts = 4) {
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try { return await fn(); } catch (err) {
+      lastErr = err;
+      if (!isTransient(err) || i === attempts - 1) break;
+      await new Promise((r) => setTimeout(r, 500 * (i + 1)));
+    }
+  }
+  if (lastErr && !(lastErr instanceof Error)) {
+    const e = new Error((lastErr.message) || 'database connection failed');
+    e.cause = lastErr;
+    throw e;
+  }
+  throw lastErr;
+}
 
 // ---------------------------------------------------------------------------
 // الواجهة العامة: async في كل المحركات، بنفس شكل الاستخدام السابق (prepare/run/get/all).
@@ -563,12 +602,12 @@ const schemaReady = initSchema().catch((err) => {
 const db = {
   prepare(sql) {
     return {
-      async run(...params) { await schemaReady; return rawRun(sql, params); },
-      async get(...params) { await schemaReady; return rawGet(sql, params); },
-      async all(...params) { await schemaReady; return rawAll(sql, params); }
+      async run(...params) { await schemaReady(); return withRetry(() => rawRun(sql, params)); },
+      async get(...params) { await schemaReady(); return withRetry(() => rawGet(sql, params)); },
+      async all(...params) { await schemaReady(); return withRetry(() => rawAll(sql, params)); }
     };
   },
-  async exec(sql) { await schemaReady; return rawExec(sql); }
+  async exec(sql) { await schemaReady(); return withRetry(() => rawExec(sql)); }
 };
 
 async function getSettings() {
@@ -588,6 +627,6 @@ async function setSetting(key, value) {
 }
 
 module.exports = {
-  db, ready: schemaReady, DATA_DIR, UPLOAD_DIR, REMOTE_DB, UPLOADS_IN_DB,
+  db, get ready() { return schemaReady(); }, DATA_DIR, UPLOAD_DIR, REMOTE_DB, UPLOADS_IN_DB,
   getSettings, getSetting, setSetting, DEFAULT_SETTINGS
 };
