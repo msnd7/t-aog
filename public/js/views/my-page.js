@@ -21,7 +21,7 @@ export async function render({ state }) {
           <div class="card__head"><div><h2>${icon('barcode')} بطاقتي</h2><p>اعرضها للمشرف ليمسح الباركود ويضيف نقاطك</p></div></div>
           ${studentCardMarkup(student, {
     logo: state.settings.logo || '/img/logo.jpg',
-    academy: state.settings.academy_name || 'رياض القرآن',
+    academy: state.settings.mosque_name || state.settings.academy_name || 'رياض القرآن',
     points: wallet.balance
   })}
           <button class="btn btn--block mt" data-scan-mode>${icon('eye', { size: 18 })} عرض البطاقة للمسح</button>

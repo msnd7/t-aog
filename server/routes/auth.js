@@ -6,6 +6,12 @@ const {
   setSessionCookie, clearSessionCookie
 } = require('../auth');
 const { normalizePhone, asyncHandler } = require('../util');
+const { setMosqueCookie } = require('../mosque');
+
+/** الحسابات النشطة التي يُسمح لها بالدخول: مسجدها مفعَّل، أو مدير المنصة */
+const ACTIVE_USER = `
+  SELECT u.* FROM users u LEFT JOIN mosques m ON m.id = u.mosque_id
+   WHERE u.phone = ? AND u.active = 1 AND (u.role = 'admin' OR m.active = 1)`;
 
 const router = express.Router();
 
@@ -33,7 +39,7 @@ const isValidCode = (code) => /^\d{4,6}$/.test(String(code));
 router.post('/check-phone', asyncHandler(async (req, res) => {
   const phone = normalizePhone(req.body.phone);
   if (!phone) return res.status(400).json({ error: 'أدخل رقم جوال صحيح، مثال: 0501234567' });
-  const user = await db.prepare('SELECT id, name FROM users WHERE phone = ? AND active = 1').get(phone);
+  const user = await db.prepare(ACTIVE_USER).get(phone);
   if (!user) {
     return res.status(404).json({ error: 'هذا الرقم غير مسجَّل. راجع مشرف الحلقة لتسجيل رقمك.' });
   }
@@ -49,7 +55,7 @@ router.post('/login', asyncHandler(async (req, res) => {
   const key = `${req.ip}:${phone}`;
   if (throttled(key)) return res.status(429).json({ error: 'محاولات كثيرة، انتظر قليلاً ثم أعد المحاولة' });
 
-  const user = await db.prepare('SELECT * FROM users WHERE phone = ? AND active = 1').get(phone);
+  const user = await db.prepare(ACTIVE_USER).get(phone);
   if (!user || !verifyCode(code, user.code_hash)) {
     recordAttempt(key, false);
     return res.status(401).json({ error: 'رقم الجوال أو الرمز غير صحيح' });
@@ -57,17 +63,21 @@ router.post('/login', asyncHandler(async (req, res) => {
   recordAttempt(key, true);
   const { token, expires } = await createSession(user.id);
   setSessionCookie(res, token, expires);
+  // مدير المنصة يبدأ دائماً من لوحة المنصة
+  if (user.role === 'admin') setMosqueCookie(res, null);
   res.json({ user: publicUser(user) });
 }));
 
 router.post('/logout', asyncHandler(async (req, res) => {
   await destroySession(req.sessionToken);
   clearSessionCookie(res);
+  setMosqueCookie(res, null);
   res.json({ ok: true });
 }));
 
 router.get('/me', (req, res) => {
-  res.json({ user: publicUser(req.user) });
+  const mosque = req.mosque ? { id: req.mosque.id, name: req.mosque.name, active: req.mosque.active } : null;
+  res.json({ user: publicUser(req.user), mosque });
 });
 
 /**

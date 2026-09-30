@@ -14,7 +14,11 @@ const { app, ensureAdmin } = require('../server/index');
 
 let server;
 let base;
+// مخزن ملفات تعريف الارتباط: الجلسة ومسجد المدير الحالي
+const jar = new Map();
 let cookie = '';
+const syncCookie = () => { cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; '); };
+const resetCookies = () => { jar.clear(); cookie = ''; };
 
 async function call(method, url, body, isForm = false) {
   const options = { method, headers: {} };
@@ -25,7 +29,13 @@ async function call(method, url, body, isForm = false) {
   } else if (isForm) options.body = body;
   const response = await fetch(base + url, options);
   const setCookie = response.headers.getSetCookie ? response.headers.getSetCookie() : [];
-  for (const raw of setCookie) cookie = raw.split(';')[0];
+  for (const raw of setCookie) {
+    const [pair] = raw.split(';');
+    const idx = pair.indexOf('=');
+    const value = pair.slice(idx + 1);
+    if (value) jar.set(pair.slice(0, idx), value); else jar.delete(pair.slice(0, idx));
+  }
+  syncCookie();
   const text = await response.text();
   let payload = null;
   try { payload = JSON.parse(text); } catch { payload = text; }
@@ -80,6 +90,15 @@ test('الدخول برقم الجوال والرمز المؤقت ثم إلزا
   const changed = await call('POST', '/api/auth/code', { current: '1234', next: '4321', confirm: '4321' });
   assert.equal(changed.status, 200);
   assert.equal(changed.body.user.must_change_code, false);
+
+  // مدير المنصة يبدأ من لوحة المنصة، ويختار المسجد قبل فتح بياناته
+  const noMosque = await call('GET', '/api/students');
+  assert.equal(noMosque.status, 400);
+  assert.equal(noMosque.body.mosque_required, true);
+
+  const entered = await call('POST', '/api/mosques/enter', { id: 1 });
+  assert.equal(entered.status, 200);
+  assert.equal(entered.body.mosque.name, 'جامع عبدالله بن عمر');
 
   const allowed = await call('GET', '/api/students');
   assert.equal(allowed.status, 200);
@@ -256,7 +275,7 @@ test('الطالب يدخل برقم جواله ولا يرى غير صفحته'
   const other = await call('POST', '/api/students', { name: 'طالب آخر', halaqa_id: halaqaId });
   const otherId = other.body.student.id;
 
-  cookie = '';
+  resetCookies();
   const login = await call('POST', '/api/auth/login', { phone: '0512345678', code: '1234' });
   assert.equal(login.status, 200);
   assert.equal(login.body.user.role, 'student');
@@ -274,13 +293,14 @@ test('الطالب يدخل برقم جواله ولا يرى غير صفحته'
 });
 
 test('إعادة تعيين رمز الطالب تعيده للرمز المؤقت', async () => {
-  cookie = '';
+  resetCookies();
   await call('POST', '/api/auth/login', { phone: '0500000001', code: '4321' });
+  await call('POST', '/api/mosques/enter', { id: 1 });
   const reset = await call('POST', `/api/students/${studentId}/reset-code`);
   assert.equal(reset.status, 200);
   assert.equal(reset.body.code, '1234');
 
-  cookie = '';
+  resetCookies();
   const relogin = await call('POST', '/api/auth/login', { phone: '0512345678', code: '1234' });
   assert.equal(relogin.status, 200);
   assert.equal(relogin.body.user.must_change_code, true);

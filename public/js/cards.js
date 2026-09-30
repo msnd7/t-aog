@@ -32,7 +32,7 @@ function fullCard(student) {
       <div class="card__head">
         <div class="card__brand">
           <img src="${esc(logo)}" alt="">
-          <strong>${esc(settings.academy_name || 'مجمع رياض القرآن التعليمي')}</strong>
+          <strong>${esc(settings.mosque_name || settings.academy_name || 'مجمع رياض القرآن التعليمي')}</strong>
         </div>
         <span class="card__tag">بطاقة الطالب</span>
       </div>

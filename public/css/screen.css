@@ -194,3 +194,17 @@ html, body {
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
+
+/* اختيار المسجد عند فتح الشاشة أول مرة */
+.mosque-picker__list {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 2vh; margin-top: 3vh;
+}
+.mosque-picker__list button {
+  display: flex; flex-direction: column; align-items: center; gap: 1.2vh; min-width: 24vw;
+  padding: 3vh 2vw; border-radius: 22px; cursor: pointer; font: inherit; font-size: 3vh; font-weight: 700;
+  color: inherit; background: rgba(255, 255, 255, .08); border: 1px solid rgba(255, 255, 255, .22);
+  transition: background .18s, transform .18s;
+}
+.mosque-picker__list button:hover { background: rgba(240, 149, 31, .25); transform: translateY(-3px); }
+.mosque-picker__list button .icn { color: #f5b055; }
+.mosque-picker__hint { text-align: center; opacity: .6; font-size: clamp(.7rem, 1.8vh, 1.1rem); margin-top: 3vh; }

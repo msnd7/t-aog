@@ -8,25 +8,42 @@ const { studentWallet } = require('../stats');
 
 const router = express.Router();
 
-/** Inserts one point entry, always stamping the student's current halaqa. */
+/** Inserts one point entry, always stamping the student's current halaqa and mosque. */
 async function addEntry({ studentId = null, halaqaId = null, category, subtype = null, points, note = null, chequeId = null, userId = null }) {
   let halaqa = halaqaId;
-  if (studentId && !halaqa) {
-    const row = await db.prepare('SELECT halaqa_id FROM users WHERE id = ?').get(studentId);
-    halaqa = row?.halaqa_id || null;
+  let mosqueId = null;
+  if (studentId) {
+    const row = await db.prepare('SELECT halaqa_id, mosque_id FROM users WHERE id = ?').get(studentId);
+    if (!halaqa) halaqa = row?.halaqa_id || null;
+    mosqueId = row?.mosque_id || null;
+  }
+  if (!mosqueId && halaqa) {
+    const row = await db.prepare('SELECT mosque_id FROM halaqat WHERE id = ?').get(halaqa);
+    mosqueId = row?.mosque_id || null;
   }
   const info = await db.prepare(`
-    INSERT INTO point_entries (student_id, halaqa_id, category, subtype, points, note, cheque_id, created_by, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO point_entries (student_id, halaqa_id, category, subtype, points, note, cheque_id, created_by, created_at, mosque_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING id
-  `).run(studentId, halaqa, category, subtype, Math.round(points), note, chequeId, userId, nowIso());
+  `).run(studentId, halaqa, category, subtype, Math.round(points), note, chequeId, userId, nowIso(), mosqueId);
   return Number(info.lastInsertRowid);
+}
+
+/** يتحقق أن الطلاب المختارين من المسجد الحالي، ويعيد معرّفاتهم الصالحة فقط */
+async function studentsInMosque(ids, mosqueId) {
+  if (!ids.length) return [];
+  const placeholders = ids.map(() => '?').join(',');
+  const rows = await db.prepare(`
+    SELECT id FROM users WHERE id IN (${placeholders}) AND role = 'student' AND mosque_id = ?
+  `).all(...ids, mosqueId);
+  const allowed = new Set(rows.map((r) => r.id));
+  return ids.filter((id) => allowed.has(id));
 }
 
 router.get('/', requireStaff, asyncHandler(async (req, res) => {
   const limit = Math.min(toInt(req.query.limit, 50), 300);
-  const params = [];
-  let where = 'WHERE 1 = 1';
+  const params = [req.mosqueId];
+  let where = 'WHERE e.mosque_id = ?';
   if (req.query.student_id) { where += ' AND e.student_id = ?'; params.push(toInt(req.query.student_id)); }
   if (req.query.halaqa_id) { where += ' AND e.halaqa_id = ?'; params.push(toInt(req.query.halaqa_id)); }
   params.push(limit);
@@ -53,13 +70,15 @@ router.post('/', requireStaff, asyncHandler(async (req, res) => {
   if (req.body.halaqa_only) {
     const halaqaId = toInt(req.body.halaqa_id);
     if (!halaqaId) return res.status(400).json({ error: 'اختر الحلقة' });
+    const halaqa = await db.prepare('SELECT id FROM halaqat WHERE id = ? AND mosque_id = ?').get(halaqaId, req.mosqueId);
+    if (!halaqa) return res.status(404).json({ error: 'الحلقة غير موجودة' });
     const id = await addEntry({ halaqaId, category: 'halaqa_bonus', points, note, userId });
     return res.status(201).json({ ok: true, ids: [id] });
   }
 
-  const ids = Array.isArray(req.body.student_ids) && req.body.student_ids.length
+  const ids = await studentsInMosque(Array.isArray(req.body.student_ids) && req.body.student_ids.length
     ? req.body.student_ids.map((v) => toInt(v)).filter(Boolean)
-    : [toInt(req.body.student_id)].filter(Boolean);
+    : [toInt(req.body.student_id)].filter(Boolean), req.mosqueId);
   if (!ids.length) return res.status(400).json({ error: 'اختر طالباً واحداً على الأقل' });
 
   const created = [];
@@ -74,7 +93,7 @@ router.post('/', requireStaff, asyncHandler(async (req, res) => {
 /** Undo an entry (also removes the cheque when the entry belonged to one). */
 router.delete('/:id', requireStaff, asyncHandler(async (req, res) => {
   const id = toInt(req.params.id);
-  const entry = await db.prepare('SELECT * FROM point_entries WHERE id = ?').get(id);
+  const entry = await db.prepare('SELECT * FROM point_entries WHERE id = ? AND mosque_id = ?').get(id, req.mosqueId);
   if (!entry) return res.status(404).json({ error: 'الحركة غير موجودة' });
   await db.prepare('DELETE FROM point_entries WHERE id = ?').run(id);
   if (entry.cheque_id) await db.prepare('DELETE FROM cheques WHERE id = ?').run(entry.cheque_id);
@@ -91,8 +110,9 @@ router.post('/scan', requireStaff, asyncHandler(async (req, res) => {
 
   // باركود شيك فارغ: لا يضيف نقاطاً بنفسه، بل ينتظر مسح بطاقة الطالب بعده
   if (isVoucherCode(code)) {
-    const voucher = await db.prepare('SELECT * FROM cheque_vouchers WHERE upper(code) = ?').get(code);
-    if (!voucher) return res.status(404).json({ error: `لا يوجد شيك بالباركود ${code}` });
+    const voucher = await db.prepare('SELECT * FROM cheque_vouchers WHERE upper(code) = ? AND mosque_id = ?')
+      .get(code, req.mosqueId);
+    if (!voucher) return res.status(404).json({ error: `لا يوجد شيك بالباركود ${code} في هذا المسجد` });
     if (voucher.redeemed_at) {
       const owner = await db.prepare('SELECT name FROM users WHERE id = ?').get(voucher.student_id);
       return res.status(409).json({
@@ -103,12 +123,12 @@ router.post('/scan', requireStaff, asyncHandler(async (req, res) => {
     return res.json({ ok: true, kind: 'voucher', voucher });
   }
 
-  const settings = await getSettings();
+  const settings = await getSettings(req.mosqueId);
   const student = await db.prepare(`
     SELECT u.*, h.name AS halaqa_name FROM users u LEFT JOIN halaqat h ON h.id = u.halaqa_id
-     WHERE upper(u.barcode) = ? AND u.role = 'student' AND u.active = 1
-  `).get(code);
-  if (!student) return res.status(404).json({ error: `لا يوجد طالب بالباركود ${code}` });
+     WHERE upper(u.barcode) = ? AND u.role = 'student' AND u.active = 1 AND u.mosque_id = ?
+  `).get(code, req.mosqueId);
+  if (!student) return res.status(404).json({ error: `لا يوجد طالب بالباركود ${code} في هذا المسجد` });
 
   const cooldown = toInt(settings.scan_cooldown_seconds, 20);
   const since = new Date(Date.now() - cooldown * 1000).toISOString();
@@ -142,4 +162,4 @@ router.post('/scan', requireStaff, asyncHandler(async (req, res) => {
   });
 }));
 
-module.exports = { router, addEntry };
+module.exports = { router, addEntry, studentsInMosque };

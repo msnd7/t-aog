@@ -20,7 +20,7 @@ export async function render() {
 
   return {
     title: 'لوحة المشرف',
-    subtitle: `${screen.period_label} · ${esc(screen.academy.name)}`,
+    subtitle: `${screen.period_label} · ${esc(screen.mosque.name)}`,
     actions: `
       <a class="btn btn--sm" href="#/scan">${icon('scan', { size: 16 })} مسح الباركود</a>
       <a class="btn btn--sm btn--ghost" href="#/cheques">${icon('cheque', { size: 16 })} طباعة شيكات</a>`,

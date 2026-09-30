@@ -13,8 +13,11 @@ import * as leaderboard from './views/leaderboard.js';
 import * as settingsView from './views/settings.js';
 import * as myPage from './views/my-page.js';
 import * as myOrders from './views/my-orders.js';
+import * as platform from './views/platform.js';
+import * as platformSettings from './views/platform-settings.js';
 
-export const state = { user: null, settings: {}, catalog: {} };
+/** mosque: المسجد الذي تعمل عليه الواجهة الآن (null لمدير المنصة في لوحة المنصة) */
+export const state = { user: null, mosque: null, settings: {}, catalog: {} };
 
 const STAFF_NAV = [
   { path: '/', icon: 'home', label: 'الرئيسية', group: 'المتابعة' },
@@ -25,6 +28,12 @@ const STAFF_NAV = [
   { path: '/store', icon: 'gift', label: 'المتجر' },
   { path: '/leaderboard', icon: 'trophy', label: 'الصدارة' },
   { path: '/settings', icon: 'settings', label: 'الإعدادات', adminOnly: true }
+];
+
+/** لوحة مدير المنصة قبل دخول أي مسجد */
+const PLATFORM_NAV = [
+  { path: '/', icon: 'home', label: 'لوحة المنصة', group: 'المنصة' },
+  { path: '/accounts', icon: 'settings', label: 'الحسابات والإعدادات' }
 ];
 
 const STUDENT_NAV = [
@@ -48,8 +57,28 @@ const ROUTES = [
   { pattern: /^\/settings$/, view: () => settingsView, admin: true }
 ];
 
+const PLATFORM_ROUTES = [
+  { pattern: /^\/$/, view: () => platform },
+  { pattern: /^\/accounts$/, view: () => platformSettings }
+];
+
 export const isStaff = () => !!state.user && (state.user.role === 'admin' || state.user.role === 'supervisor');
 export const isAdmin = () => !!state.user && state.user.role === 'admin';
+/** مدير المنصة في لوحة المنصة (لم يدخل مسجداً بعد) */
+export const isPlatform = () => isAdmin() && !state.mosque;
+export const screenUrl = () => (state.mosque ? `/screen.html?mosque=${state.mosque.id}` : '/screen.html');
+
+/** دخول مدير المنصة إلى واجهة مسجد، أو العودة إلى لوحة المنصة بتمرير null */
+export async function enterMosque(id) {
+  try {
+    const data = await api.post('/api/mosques/enter', { id: id || 0 });
+    state.mosque = data.mosque;
+    await loadSettings();
+    window.location.hash = '#/';
+    renderApp();
+    if (data.mosque) ok(`أنت الآن في واجهة ${data.mosque.name}`);
+  } catch (error) { fail(error.message); }
+}
 export const navigate = (path) => { window.location.hash = `#${path}`; };
 
 function currentPath() {
@@ -138,6 +167,7 @@ function loginScreen() {
       const data = await api.post('/api/auth/login', { phone: phoneInput.value, code: codeInput.value });
       state.user = data.user;
       lastUsedCode = codeInput.value.trim();
+      await loadMe();
       await loadSettings();
       window.location.hash = '#/';
       if (!data.user.must_change_code) ok(`أهلاً ${data.user.name}`);
@@ -218,6 +248,7 @@ function changeCodeScreen() {
 // ---- layout --------------------------------------------------------------
 
 function navItems() {
+  if (isPlatform()) return PLATFORM_NAV;
   const items = isStaff() ? STAFF_NAV : STUDENT_NAV;
   return items.filter((item) => !item.adminOnly || isAdmin());
 }
@@ -229,9 +260,24 @@ function navMarkup(path, className) {
     <a class="${item.path === path ? 'active' : ''}" href="#${item.path}">
       ${icon(item.icon)}<span>${esc(item.label)}</span>
     </a>`).join('');
-  return links + (isSidebar
+  return links + (isSidebar && state.mosque
     ? `<span class="nav__label">أدوات</span>
-       <a href="/screen.html" target="_blank" rel="noopener">${icon('screen')}<span>شاشة العرض</span></a>` : '');
+       <a href="${screenUrl()}" target="_blank" rel="noopener">${icon('screen')}<span>شاشة العرض</span></a>` : '');
+}
+
+/** بطاقة المسجد الحالي أعلى القائمة الجانبية، ولمدير المنصة زر العودة للوحة المنصة */
+function mosqueBadge() {
+  if (isPlatform()) {
+    return `<div class="mosque-badge mosque-badge--platform">${icon('home', { size: 18 })}
+      <div><span>الواجهة الحالية</span><strong>لوحة المنصة — كل المساجد</strong></div></div>`;
+  }
+  if (!state.mosque) return '';
+  return `
+    <div class="mosque-badge">
+      ${icon('mosque', { size: 18 })}
+      <div><span>${isAdmin() ? 'تتصفح واجهة' : 'المسجد'}</span><strong>${esc(state.mosque.name)}</strong></div>
+      ${isAdmin() ? `<button class="btn btn--sm btn--ghost" type="button" data-leave-mosque>${icon('back', { size: 16 })} المنصة</button>` : ''}
+    </div>`;
 }
 
 function layout(path) {
@@ -246,6 +292,7 @@ function layout(path) {
             <span>منصة التحفيز</span>
           </div>
         </div>
+        ${mosqueBadge()}
         <nav class="nav">${navMarkup(path, 'nav')}</nav>
         <div class="sidebar__foot">
           <div class="sidebar__user">
@@ -260,7 +307,10 @@ function layout(path) {
       </aside>
       <main class="main">
         <header class="topbar">
-          <div class="topbar__title"><h1 id="page-title">…</h1><p id="page-subtitle"></p></div>
+          <div class="topbar__title">
+            ${state.mosque && isAdmin() ? `<button class="mosque-chip" type="button" data-leave-mosque>${icon('mosque', { size: 14 })} ${esc(state.mosque.name)} · العودة للمنصة</button>` : ''}
+            <h1 id="page-title">…</h1><p id="page-subtitle"></p>
+          </div>
           <div class="topbar__actions">
             <span id="page-actions" class="row" style="gap:.45rem"></span>
             ${menu({
@@ -271,7 +321,8 @@ function layout(path) {
       menuItem({ label: esc(state.user.name), name: 'user', attrs: 'disabled style="opacity:.7"' }),
       menuSep(),
       menuItem({ label: 'تغيير رمز الدخول', name: 'key', attrs: 'data-menu-code' }),
-      menuItem({ label: 'شاشة العرض', name: 'screen', href: '/screen.html', target: '_blank' }),
+      ...(state.mosque ? [menuItem({ label: 'شاشة العرض', name: 'screen', href: screenUrl(), target: '_blank' })] : []),
+      ...(isAdmin() && state.mosque ? [menuItem({ label: 'العودة للوحة المنصة', name: 'home', attrs: 'data-leave-mosque' })] : []),
       menuSep(),
       menuItem({ label: 'تسجيل الخروج', name: 'logout', danger: true, attrs: 'data-menu-logout' })
     ]
@@ -285,12 +336,17 @@ function layout(path) {
   const logout = async () => {
     await api.logout();
     state.user = null;
+    state.mosque = null;
     window.location.hash = '';
+    await loadSettings();
     renderApp();
   };
   root.querySelector('#logout').addEventListener('click', logout);
   root.querySelector('[data-menu-logout]').addEventListener('click', logout);
   root.querySelector('[data-menu-code]').addEventListener('click', () => settingsView.changeMyCodeModal());
+  root.querySelectorAll('[data-leave-mosque]').forEach((button) => {
+    button.addEventListener('click', () => enterMosque(null));
+  });
 }
 
 function roleLabel(role) {
@@ -309,7 +365,7 @@ async function renderRoute() {
   const content = document.getElementById('content');
   const ctx = { isStaff: isStaff(), isAdmin: isAdmin(), state };
 
-  const match = ROUTES.find((route) => route.pattern.test(path));
+  const match = (isPlatform() ? PLATFORM_ROUTES : ROUTES).find((route) => route.pattern.test(path));
   if (!match) {
     content.innerHTML = `<div class="card"><div class="empty">${icon('compass', { size: 40, stroke: 1.3 })}الصفحة غير موجودة</div></div>`;
     return;
@@ -337,6 +393,12 @@ async function renderRoute() {
       state.user = { ...state.user, must_change_code: true };
       return renderApp();
     }
+    // انتهى اختيار المسجد (أو عُطِّل): العودة إلى لوحة المنصة
+    if (error.payload && error.payload.mosque_required && isAdmin() && state.mosque) {
+      state.mosque = null;
+      window.location.hash = '#/';
+      return renderApp();
+    }
     content.innerHTML = `<div class="card"><div class="empty">${icon('warning', { size: 40, stroke: 1.3 })}${esc(error.message)}</div></div>`;
   }
 }
@@ -357,12 +419,17 @@ async function loadSettings() {
   } catch { /* الإعدادات العامة اختيارية */ }
 }
 
-async function boot() {
-  await loadSettings();
+async function loadMe() {
   try {
     const data = await api.me();
     state.user = data.user;
-  } catch { state.user = null; }
+    state.mosque = data.mosque || null;
+  } catch { state.user = null; state.mosque = null; }
+}
+
+async function boot() {
+  await loadMe();
+  await loadSettings();
   window.addEventListener('hashchange', () => { if (state.user) renderApp(); });
   renderApp();
   if ('serviceWorker' in navigator) {

@@ -1,6 +1,8 @@
 'use strict';
 const express = require('express');
-const { db, getSettings, setSetting, DEFAULT_SETTINGS } = require('../db');
+const {
+  db, getSettings, setSetting, setMosqueSetting, DEFAULT_SETTINGS, MOSQUE_SETTING_KEYS
+} = require('../db');
 const { requireAdmin, requireStaff, hashCode } = require('../auth');
 const { nowIso, toInt, normalizePhone, asyncHandler } = require('../util');
 const { upload, uploadUrl } = require('../upload');
@@ -13,23 +15,42 @@ const PUBLIC_KEYS = ['academy_name', 'academy_subtitle', 'currency', 'scan_point
 
 const defaultCode = async () => (await getSettings()).default_code || '1234';
 
+/**
+ * الإعدادات الفعّالة للمسجد الحالي (أو إعدادات المنصة في لوحة المدير)،
+ * مع اسم المسجد ليظهر في الواجهة والشيكات المطبوعة.
+ */
 router.get('/', asyncHandler(async (req, res) => {
-  const all = await getSettings();
+  const all = await getSettings(req.mosqueId);
   const isStaff = req.user && (req.user.role === 'admin' || req.user.role === 'supervisor');
   const payload = isStaff ? all : Object.fromEntries(PUBLIC_KEYS.map((k) => [k, all[k]]));
-  res.json({ settings: { logo: '/img/logo.jpg', ...payload }, catalog: await chequeCatalog() });
+  delete payload.mosques_migrated;
+  res.json({
+    settings: { logo: '/img/logo.jpg', ...payload, mosque_name: req.mosque ? req.mosque.name : '' },
+    mosque: req.mosque ? { id: req.mosque.id, name: req.mosque.name } : null,
+    catalog: await chequeCatalog(req.mosqueId)
+  });
 }));
 
+/**
+ * حفظ الإعدادات: قيم الشيكات والمسح والشاشة تُحفظ للمسجد الحالي فقط، أما
+ * اسم المجمع والشعار والرمز المؤقت فمشتركة لكل المنصة.
+ */
 router.patch('/', requireAdmin, asyncHandler(async (req, res) => {
+  const perMosque = new Set(MOSQUE_SETTING_KEYS);
   const allowed = new Set([...Object.keys(DEFAULT_SETTINGS), 'logo', 'public_screen']);
   let changed = 0;
   for (const [key, value] of Object.entries(req.body || {})) {
     if (!allowed.has(key)) continue;
-    await setSetting(key, value);
+    if (perMosque.has(key)) {
+      if (!req.mosqueId) continue; // قيم المساجد تُضبط من داخل واجهة كل مسجد
+      await setMosqueSetting(req.mosqueId, key, value);
+    } else {
+      await setSetting(key, value);
+    }
     changed += 1;
   }
   if (!changed) return res.status(400).json({ error: 'لا يوجد تعديل' });
-  res.json({ ok: true, settings: await getSettings() });
+  res.json({ ok: true, settings: await getSettings(req.mosqueId) });
 }));
 
 router.post('/logo', requireAdmin, upload.single('logo'), asyncHandler(async (req, res) => {
@@ -41,13 +62,28 @@ router.post('/logo', requireAdmin, upload.single('logo'), asyncHandler(async (re
 
 // ---- staff accounts (admin only) ----------------------------------------
 
+/**
+ * داخل مسجد: مشرفو ذلك المسجد فقط. في لوحة المنصة: كل الحسابات مع مساجدها.
+ */
 router.get('/staff', requireStaff, asyncHandler(async (req, res) => {
+  const params = [];
+  let where = "WHERE u.role IN ('admin','supervisor')";
+  if (req.mosqueId) { where = "WHERE u.role = 'supervisor' AND u.mosque_id = ?"; params.push(req.mosqueId); }
   const rows = await db.prepare(`
-    SELECT id, phone, name, role, active, must_change_code, created_at FROM users
-     WHERE role IN ('admin','supervisor') ORDER BY role, name
-  `).all();
+    SELECT u.id, u.phone, u.name, u.role, u.active, u.must_change_code, u.created_at, u.mosque_id,
+           m.name AS mosque_name
+      FROM users u LEFT JOIN mosques m ON m.id = u.mosque_id
+     ${where} ORDER BY u.role, m.sort_order, u.name
+  `).all(...params);
   res.json({ staff: rows });
 }));
+
+/** مسجد المشرف: المُرسَل في الطلب، أو المسجد الذي يعمل فيه المدير حالياً */
+async function staffMosque(req) {
+  const id = toInt(req.body.mosque_id) || req.mosqueId;
+  if (!id) return null;
+  return db.prepare('SELECT id FROM mosques WHERE id = ?').get(id);
+}
 
 /** المشرف الجديد يُسجَّل باسمه ورقم جواله، ويدخل بالرمز المؤقت ثم يغيّره */
 router.post('/staff', requireAdmin, asyncHandler(async (req, res) => {
@@ -59,13 +95,20 @@ router.post('/staff', requireAdmin, asyncHandler(async (req, res) => {
   if (await db.prepare('SELECT 1 FROM users WHERE phone = ?').get(phone)) {
     return res.status(409).json({ error: 'رقم الجوال مسجَّل لحساب آخر' });
   }
+  // المشرف يتبع مسجداً واحداً، ومدير المنصة يرى كل المساجد
+  let mosqueId = null;
+  if (role === 'supervisor') {
+    const mosque = await staffMosque(req);
+    if (!mosque) return res.status(400).json({ error: 'اختر مسجد المشرف' });
+    mosqueId = mosque.id;
+  }
   const code = await defaultCode();
   const info = await db.prepare(`
-    INSERT INTO users (phone, code_hash, must_change_code, role, name, active, created_at)
-    VALUES (?, ?, 1, ?, ?, 1, ?)
+    INSERT INTO users (phone, code_hash, must_change_code, role, name, active, created_at, mosque_id)
+    VALUES (?, ?, 1, ?, ?, 1, ?, ?)
     RETURNING id
-  `).run(phone, hashCode(code), role, name, nowIso());
-  res.status(201).json({ id: Number(info.lastInsertRowid), phone, code });
+  `).run(phone, hashCode(code), role, name, nowIso(), mosqueId);
+  res.status(201).json({ id: Number(info.lastInsertRowid), phone, code, mosque_id: mosqueId });
 }));
 
 router.patch('/staff/:id', requireAdmin, asyncHandler(async (req, res) => {
@@ -75,7 +118,15 @@ router.patch('/staff/:id', requireAdmin, asyncHandler(async (req, res) => {
   const fields = [];
   const params = [];
   if (req.body.name) { fields.push('name = ?'); params.push(String(req.body.name).trim()); }
-  if (req.body.role) { fields.push('role = ?'); params.push(req.body.role === 'admin' ? 'admin' : 'supervisor'); }
+  const role = req.body.role ? (req.body.role === 'admin' ? 'admin' : 'supervisor') : user.role;
+  if (req.body.role) { fields.push('role = ?'); params.push(role); }
+  if (role === 'admin' && user.role !== 'admin') { fields.push('mosque_id = ?'); params.push(null); }
+  if (role === 'supervisor' && (req.body.mosque_id !== undefined || !user.mosque_id)) {
+    const mosque = await staffMosque(req);
+    if (!mosque) return res.status(400).json({ error: 'اختر مسجد المشرف' });
+    fields.push('mosque_id = ?');
+    params.push(mosque.id);
+  }
   if (req.body.phone !== undefined) {
     const phone = normalizePhone(req.body.phone);
     if (!phone) return res.status(400).json({ error: 'رقم الجوال غير صحيح، مثال: 0501234567' });

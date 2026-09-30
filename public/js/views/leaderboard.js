@@ -4,7 +4,8 @@ import { esc, num, nb, avatar, rankBadge, emptyState, periodPick, pick, icon } f
 
 const view = { scope: 'students', period: 'week' };
 
-export async function render() {
+export async function render({ state }) {
+  const screenHref = state.mosque ? `/screen.html?mosque=${state.mosque.id}` : '/screen.html';
   const data = await api.get(`/api/screen/leaderboard?scope=${view.scope}&period=${view.period}&limit=100`);
   const top = data.rows.slice(0, 3);
   const rest = data.rows.slice(3);
@@ -12,7 +13,7 @@ export async function render() {
   return {
     title: 'الصدارة',
     subtitle: `${view.scope === 'students' ? 'ترتيب الطلاب' : 'ترتيب الحلقات'} · ${esc(data.period_label)}`,
-    actions: `<a class="btn btn--sm btn--ghost" href="/screen.html" target="_blank" rel="noopener">${icon('screen', { size: 16 })} شاشة العرض</a>`,
+    actions: `<a class="btn btn--sm btn--ghost" href="${screenHref}" target="_blank" rel="noopener">${icon('screen', { size: 16 })} شاشة العرض</a>`,
     html: `
       <div class="toolbar">
         ${pick({

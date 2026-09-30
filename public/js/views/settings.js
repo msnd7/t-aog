@@ -1,4 +1,7 @@
-/** الإعدادات: بيانات المجمع، قيم الشيكات، حسابات المشرفين */
+/**
+ * إعدادات المسجد الحالي: اسمه وقيم المسح والشاشة، قيم الشيكات، ومشرفوه.
+ * هوية المجمع المشتركة (الاسم والشعار والرمز المؤقت) في «الحسابات والإعدادات» بلوحة المنصة.
+ */
 import { api } from '../api.js';
 import { esc, ok, fail, modal, formValues, confirmDialog, icon, menu, menuItem, pick } from '../ui.js';
 
@@ -7,19 +10,19 @@ const view = { section: 'all' };
 
 const SECTIONS = [
   { value: 'all', label: 'كل الأقسام' },
-  { value: 'academy', label: 'بيانات المجمع والشاشة' },
+  { value: 'academy', label: 'بيانات المسجد والشاشة' },
   { value: 'cheques', label: 'قيم بنود الشيكات' },
-  { value: 'staff', label: 'حسابات المشرفين' }
+  { value: 'staff', label: 'مشرفو المسجد' }
 ];
 
-export async function render() {
+export async function render({ state }) {
   const [settingsRes, staffRes] = await Promise.all([api.get('/api/settings'), api.get('/api/settings/staff')]);
-  cache = { settings: settingsRes.settings, staff: staffRes.staff };
+  cache = { settings: settingsRes.settings, staff: staffRes.staff, mosque: state.mosque };
   const s = cache.settings;
 
   return {
     title: 'الإعدادات',
-    subtitle: 'ضبط المنصة وقيم النقاط وحسابات المشرفين',
+    subtitle: `إعدادات ${esc(state.mosque ? state.mosque.name : 'المسجد')}: قيم النقاط والشيكات والمشرفين`,
     actions: `<button class="btn btn--sm btn--ghost" data-my-code>${icon('key', { size: 16 })} تغيير رمزي</button>`,
     html: `
       <div class="toolbar">
@@ -27,10 +30,9 @@ export async function render() {
       </div>
       <div class="grid cols-2">
         <div class="card" data-sec="academy">
-          <div class="card__head"><div><h2>${icon('settings')} بيانات المجمع</h2><p>تظهر في الشاشات والشيكات</p></div></div>
+          <div class="card__head"><div><h2>${icon('mosque')} بيانات المسجد</h2><p>تخص هذا المسجد وحده</p></div></div>
           <form id="academy-form">
-            <div class="field"><label>اسم المجمع</label><input name="academy_name" value="${esc(s.academy_name || '')}"></div>
-            <div class="field"><label>العبارة التعريفية</label><input name="academy_subtitle" value="${esc(s.academy_subtitle || '')}"></div>
+            <div class="field"><label>اسم المسجد</label><input name="mosque_name" required value="${esc(s.mosque_name || '')}"></div>
             <div class="inline-fields">
               <div class="field"><label>مسمى العملة/النقاط</label><input name="currency" value="${esc(s.currency || 'ريال')}"></div>
               <div class="field"><label>بداية الأسبوع</label>
@@ -44,11 +46,6 @@ export async function render() {
               <div class="field"><label>نقاط كل مسحة باركود</label><input name="scan_points" type="number" step="5" value="${esc(s.scan_points || 25)}"></div>
               <div class="field"><label>مهلة منع تكرار المسح (ثانية)</label><input name="scan_cooldown_seconds" type="number" value="${esc(s.scan_cooldown_seconds || 20)}"></div>
             </div>
-            <div class="field">
-              <label>الرمز المؤقت للحسابات الجديدة</label>
-              <input name="default_code" inputmode="numeric" dir="ltr" pattern="\\d{4,6}" value="${esc(s.default_code || '1234')}">
-              <span class="hint">يدخل به الطالب أو المشرف أول مرة، ثم تظهر له شاشة تغيير الرمز إجبارياً.</span>
-            </div>
             <div class="inline-fields">
               <div class="field"><label>مدة عرض كل شاشة (ثانية)</label><input name="screen_rotate_seconds" type="number" value="${esc(s.screen_rotate_seconds || 14)}"></div>
               <div class="field"><label>شاشة العرض بدون تسجيل دخول</label>
@@ -59,11 +56,6 @@ export async function render() {
               </div>
             </div>
             <button class="btn" type="submit">حفظ البيانات</button>
-          </form>
-          <div class="divider"></div>
-          <form id="logo-form">
-            <div class="field"><label>شعار المجمع</label><input type="file" name="logo" accept="image/*" required></div>
-            <button class="btn btn--ghost btn--sm" type="submit">${icon('upload', { size: 16 })} رفع الشعار</button>
           </form>
         </div>
 
@@ -90,7 +82,7 @@ export async function render() {
 
       <div class="card mt" data-sec="staff">
         <div class="card__head">
-          <div><h2>${icon('groups')} حسابات المشرفين</h2><p>من يستطيع الرصد وإصدار الشيكات</p></div>
+          <div><h2>${icon('groups')} مشرفو المسجد</h2><p>يتابعون طلاب هذا المسجد فقط: الرصد وإصدار الشيكات</p></div>
           <button class="btn btn--sm" data-add-staff>${icon('plus', { size: 16 })} حساب جديد</button>
         </div>
         <div class="table-wrap">
@@ -117,7 +109,7 @@ export async function render() {
       })
     ]
   })}</td>
-                </tr>`).join('')}
+                </tr>`).join('') || '<tr><td colspan="5" class="muted">لا يوجد مشرفون بعد — أضف حساب مشرف وشارك معه رقم الجوال والرمز المؤقت</td></tr>'}
             </tbody>
           </table>
         </div>
@@ -144,16 +136,21 @@ export function mount({ content, refresh }) {
       refresh();
     } catch (error) { fail(error.message); }
   };
-  content.querySelector('#academy-form').onsubmit = (event) => { event.preventDefault(); save(event.target); };
-  content.querySelector('#cheque-form').onsubmit = (event) => { event.preventDefault(); save(event.target); };
-  content.querySelector('#logo-form').onsubmit = async (event) => {
+  content.querySelector('#academy-form').onsubmit = async (event) => {
     event.preventDefault();
+    const { mosque_name: name, ...values } = formValues(event.target);
     try {
-      await api.upload('/api/settings/logo', new FormData(event.target));
-      ok('تم رفع الشعار');
+      // اسم المسجد يُحفظ في جدول المساجد، وبقية القيم في إعدادات المسجد
+      if (cache.mosque && name && name !== cache.settings.mosque_name) {
+        await api.patch(`/api/mosques/${cache.mosque.id}`, { name });
+        cache.mosque.name = name;
+      }
+      await api.patch('/api/settings', values);
+      ok('تم الحفظ');
       window.location.reload();
     } catch (error) { fail(error.message); }
   };
+  content.querySelector('#cheque-form').onsubmit = (event) => { event.preventDefault(); save(event.target); };
 
   content.querySelector('[data-add-staff]').onclick = () => staffModal(refresh);
   content.querySelectorAll('[data-reset]').forEach((button) => {
@@ -183,7 +180,7 @@ export function mount({ content, refresh }) {
 
 function staffModal(onDone) {
   modal({
-    title: 'حساب مشرف جديد',
+    title: `مشرف جديد — ${cache.mosque ? cache.mosque.name : ''}`,
     render: () => `
       <form id="staff-form">
         <div class="field"><label>الاسم</label><input name="name" required></div>
@@ -191,10 +188,8 @@ function staffModal(onDone) {
           <label>رقم الجوال (للدخول)</label>
           <input name="phone" inputmode="tel" dir="ltr" placeholder="05xxxxxxxx" required>
         </div>
-        <div class="field"><label>الصلاحية</label>
-          <select name="role"><option value="supervisor">مشرف</option><option value="admin">مدير المنصة</option></select>
-        </div>
-        <span class="hint">يدخل المشرف برقم جواله والرمز المؤقت، ثم يختار رمزه الخاص.</span>
+        <input type="hidden" name="role" value="supervisor">
+        <span class="hint">يدخل المشرف برقم جواله والرمز المؤقت، ثم يختار رمزه الخاص ويرى طلاب هذا المسجد فقط. شارك معه رقم الجوال والرمز المؤقت.</span>
         <button class="btn btn--block mt" type="submit">إضافة</button>
       </form>`,
     onMount: (root, close) => {
