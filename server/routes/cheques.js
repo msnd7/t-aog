@@ -4,13 +4,19 @@ const { db, getSettings } = require('../db');
 const { requireStaff } = require('../auth');
 const { nowIso, chequeSerial, tafqit, toInt, asyncHandler, voucherCode, batchId } = require('../util');
 const { chequeCatalog } = require('../catalog');
-const { addEntry } = require('./points');
+const { addEntry, studentsInMosque } = require('./points');
 const { studentWallet } = require('../stats');
 
 const router = express.Router();
 
+/** إعدادات صفحات الطباعة: إعدادات المسجد مع اسمه ليظهر على الشيك */
+async function printSettings(req) {
+  const settings = await getSettings(req.mosqueId);
+  return { ...settings, mosque_name: req.mosque ? req.mosque.name : '' };
+}
+
 router.get('/catalog', asyncHandler(async (req, res) => {
-  res.json({ catalog: await chequeCatalog(), currency: (await getSettings()).currency });
+  res.json({ catalog: await chequeCatalog(req.mosqueId), currency: (await getSettings(req.mosqueId)).currency });
 }));
 
 /** currency تُمرَّر جاهزة (تُجلب مرة واحدة لكل طلب) بدل استعلام الإعدادات لكل شيك. */
@@ -33,8 +39,8 @@ const CHEQUE_QUERY = `
 `;
 
 router.get('/', requireStaff, asyncHandler(async (req, res) => {
-  const params = [];
-  let where = 'WHERE 1 = 1';
+  const params = [req.mosqueId];
+  let where = 'WHERE c.mosque_id = ?';
   if (req.query.type) { where += ' AND c.type = ?'; params.push(String(req.query.type)); }
   if (req.query.student_id) { where += ' AND c.student_id = ?'; params.push(toInt(req.query.student_id)); }
   if (req.query.halaqa_id) { where += ' AND c.halaqa_id = ?'; params.push(toInt(req.query.halaqa_id)); }
@@ -42,7 +48,7 @@ router.get('/', requireStaff, asyncHandler(async (req, res) => {
   params.push(Math.min(toInt(req.query.limit, 60), 300));
   const [rows, currency] = await Promise.all([
     db.prepare(`${CHEQUE_QUERY} ${where} ORDER BY c.id DESC LIMIT ?`).all(...params),
-    getSettings().then((s) => s.currency)
+    getSettings(req.mosqueId).then((s) => s.currency)
   ]);
   res.json({ cheques: rows.map((c) => hydrate(c, currency)) });
 }));
@@ -52,8 +58,9 @@ router.get('/print', requireStaff, asyncHandler(async (req, res) => {
   const ids = String(req.query.ids || '').split(',').map((v) => toInt(v)).filter(Boolean);
   if (!ids.length) return res.json({ cheques: [] });
   const placeholders = ids.map(() => '?').join(',');
-  const settings = await getSettings();
-  const rows = await db.prepare(`${CHEQUE_QUERY} WHERE c.id IN (${placeholders}) ORDER BY c.id`).all(...ids);
+  const settings = await printSettings(req);
+  const rows = await db.prepare(`${CHEQUE_QUERY} WHERE c.id IN (${placeholders}) AND c.mosque_id = ? ORDER BY c.id`)
+    .all(...ids, req.mosqueId);
   res.json({ cheques: rows.map((c) => hydrate(c, settings.currency)), settings });
 }));
 
@@ -62,7 +69,7 @@ router.get('/print', requireStaff, asyncHandler(async (req, res) => {
  * amount, and the same amount is credited to the student's points balance.
  */
 router.post('/', requireStaff, asyncHandler(async (req, res) => {
-  const catalog = await chequeCatalog();
+  const catalog = await chequeCatalog(req.mosqueId);
   const book = catalog[req.body.type];
   if (!book) return res.status(400).json({ error: 'نوع الشيك غير معروف' });
 
@@ -70,8 +77,8 @@ router.post('/', requireStaff, asyncHandler(async (req, res) => {
   const items = book.items.filter((item) => wanted.includes(item.key));
   if (!items.length) return res.status(400).json({ error: 'اختر بنداً واحداً على الأقل' });
 
-  const studentIds = (Array.isArray(req.body.student_ids) ? req.body.student_ids : [req.body.student_id])
-    .map((v) => toInt(v)).filter(Boolean);
+  const studentIds = await studentsInMosque((Array.isArray(req.body.student_ids) ? req.body.student_ids : [req.body.student_id])
+    .map((v) => toInt(v)).filter(Boolean), req.mosqueId);
   if (!studentIds.length) return res.status(400).json({ error: 'اختر طالباً واحداً على الأقل' });
 
   const total = items.reduce((sum, item) => sum + item.points, 0);
@@ -86,11 +93,11 @@ router.post('/', requireStaff, asyncHandler(async (req, res) => {
     const halaqa = student.halaqa_id
       ? await db.prepare('SELECT * FROM halaqat WHERE id = ?').get(student.halaqa_id) : null;
     const info = await db.prepare(`
-      INSERT INTO cheques (serial, student_id, halaqa_id, type, items, total, teacher_name, note, issued_by, issued_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO cheques (serial, student_id, halaqa_id, type, items, total, teacher_name, note, issued_by, issued_at, mosque_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       RETURNING id
     `).run('pending', studentId, student.halaqa_id, book.key, JSON.stringify(items), total,
-      teacherName || halaqa?.teacher_name || null, note, req.user.id, issuedAt);
+      teacherName || halaqa?.teacher_name || null, note, req.user.id, issuedAt, req.mosqueId);
     const id = Number(info.lastInsertRowid);
     const serial = chequeSerial(id, new Date(issuedAt));
     await db.prepare('UPDATE cheques SET serial = ? WHERE id = ?').run(serial, id);
@@ -106,7 +113,7 @@ router.post('/', requireStaff, asyncHandler(async (req, res) => {
 
   if (!created.length) return res.status(400).json({ error: 'لم يتم إصدار أي شيك' });
   const placeholders = created.map(() => '?').join(',');
-  const currency = (await getSettings()).currency;
+  const currency = (await getSettings(req.mosqueId)).currency;
   const rows = await db.prepare(`${CHEQUE_QUERY} WHERE c.id IN (${placeholders}) ORDER BY c.id`).all(...created);
   res.status(201).json({ ids: created, cheques: rows.map((c) => hydrate(c, currency)), total });
 }));
@@ -116,7 +123,7 @@ router.post('/printed', requireStaff, asyncHandler(async (req, res) => {
   if (!ids.length) return res.status(400).json({ error: 'لا توجد شيكات' });
   const at = nowIso();
   for (const id of ids) {
-    await db.prepare('UPDATE cheques SET printed_at = ? WHERE id = ?').run(at, id);
+    await db.prepare('UPDATE cheques SET printed_at = ? WHERE id = ? AND mosque_id = ?').run(at, id, req.mosqueId);
   }
   res.json({ ok: true, count: ids.length });
 }));
@@ -140,8 +147,8 @@ const VOUCHER_QUERY = `
 
 /** أنواع الشيكات وبنودها في صيغة مسطّحة تسهّل عرضها في قائمة منسدلة */
 router.get('/vouchers/options', requireStaff, asyncHandler(async (req, res) => {
-  const catalog = await chequeCatalog();
-  const settings = await getSettings();
+  const catalog = await chequeCatalog(req.mosqueId);
+  const settings = await getSettings(req.mosqueId);
   const options = [];
   for (const book of Object.values(catalog)) {
     for (const item of book.items) {
@@ -169,27 +176,30 @@ router.get('/vouchers/batches', requireStaff, asyncHandler(async (req, res) => {
            SUM(CASE WHEN printed_at IS NULL THEN 0 ELSE 1 END) AS printed,
            MIN(created_at) AS created_at
       FROM cheque_vouchers
+     WHERE mosque_id = ?
      GROUP BY batch, type, item_key, item_label, points
      ORDER BY MIN(created_at) DESC, batch DESC
      LIMIT 30
-  `).all();
+  `).all(req.mosqueId);
   res.json({ batches: rows });
 }));
 
 /** الشيكات الفارغة المطلوبة للطباعة: دفعة كاملة أو معرّفات محددة */
 router.get('/vouchers/print', requireStaff, asyncHandler(async (req, res) => {
-  const settings = await getSettings();
+  const settings = await printSettings(req);
   let rows = [];
   if (req.query.batch) {
-    rows = await db.prepare('SELECT * FROM cheque_vouchers WHERE batch = ? ORDER BY id').all(String(req.query.batch));
+    rows = await db.prepare('SELECT * FROM cheque_vouchers WHERE batch = ? AND mosque_id = ? ORDER BY id')
+      .all(String(req.query.batch), req.mosqueId);
   } else {
     const ids = String(req.query.ids || '').split(',').map((v) => toInt(v)).filter(Boolean);
     if (ids.length) {
       const placeholders = ids.map(() => '?').join(',');
-      rows = await db.prepare(`SELECT * FROM cheque_vouchers WHERE id IN (${placeholders}) ORDER BY id`).all(...ids);
+      rows = await db.prepare(`SELECT * FROM cheque_vouchers WHERE id IN (${placeholders}) AND mosque_id = ? ORDER BY id`)
+        .all(...ids, req.mosqueId);
     }
   }
-  const catalog = await chequeCatalog();
+  const catalog = await chequeCatalog(req.mosqueId);
   res.json({
     vouchers: rows.map((v) => ({
       ...v,
@@ -204,8 +214,8 @@ router.get('/vouchers/print', requireStaff, asyncHandler(async (req, res) => {
 
 /** قائمة الشيكات الفارغة (للمتابعة والبحث) */
 router.get('/vouchers', requireStaff, asyncHandler(async (req, res) => {
-  const params = [];
-  let where = 'WHERE 1 = 1';
+  const params = [req.mosqueId];
+  let where = 'WHERE v.mosque_id = ?';
   if (req.query.batch) { where += ' AND v.batch = ?'; params.push(String(req.query.batch)); }
   if (req.query.status === 'redeemed') where += ' AND v.redeemed_at IS NOT NULL';
   if (req.query.status === 'open') where += ' AND v.redeemed_at IS NULL';
@@ -216,7 +226,7 @@ router.get('/vouchers', requireStaff, asyncHandler(async (req, res) => {
 
 /** إنشاء دفعة شيكات فارغة جاهزة للطباعة */
 router.post('/vouchers', requireStaff, asyncHandler(async (req, res) => {
-  const catalog = await chequeCatalog();
+  const catalog = await chequeCatalog(req.mosqueId);
   const book = catalog[req.body.type];
   if (!book) return res.status(400).json({ error: 'نوع الشيك غير معروف' });
   const item = book.items.find((one) => one.key === String(req.body.item || req.body.item_key));
@@ -237,12 +247,13 @@ router.post('/vouchers', requireStaff, asyncHandler(async (req, res) => {
     const values = [];
     const params = [];
     for (let i = 0; i < count; i += 1) {
-      values.push('(?, ?, ?, ?, ?, ?, ?, ?, ?)');
-      params.push(voucherCode(start + i), batch, book.key, item.key, item.label, item.points, note, req.user.id, createdAt);
+      values.push('(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+      params.push(voucherCode(start + i), batch, book.key, item.key, item.label, item.points, note, req.user.id, createdAt,
+        req.mosqueId);
     }
     try {
       await db.prepare(`
-        INSERT INTO cheque_vouchers (code, batch, type, item_key, item_label, points, note, created_by, created_at)
+        INSERT INTO cheque_vouchers (code, batch, type, item_key, item_label, points, note, created_by, created_at, mosque_id)
         VALUES ${values.join(', ')}
       `).run(...params);
       const vouchers = await db.prepare('SELECT * FROM cheque_vouchers WHERE batch = ? ORDER BY id').all(batch);
@@ -262,14 +273,15 @@ router.post('/vouchers', requireStaff, asyncHandler(async (req, res) => {
 router.post('/vouchers/printed', requireStaff, asyncHandler(async (req, res) => {
   const at = nowIso();
   if (req.body.batch) {
-    const result = await db.prepare('UPDATE cheque_vouchers SET printed_at = ? WHERE batch = ? AND printed_at IS NULL')
-      .run(at, String(req.body.batch));
+    const result = await db.prepare(
+      'UPDATE cheque_vouchers SET printed_at = ? WHERE batch = ? AND mosque_id = ? AND printed_at IS NULL')
+      .run(at, String(req.body.batch), req.mosqueId);
     return res.json({ ok: true, count: result.changes || 0 });
   }
   const ids = (Array.isArray(req.body.ids) ? req.body.ids : []).map((v) => toInt(v)).filter(Boolean);
   if (!ids.length) return res.status(400).json({ error: 'لا توجد شيكات' });
   for (const id of ids) {
-    await db.prepare('UPDATE cheque_vouchers SET printed_at = ? WHERE id = ?').run(at, id);
+    await db.prepare('UPDATE cheque_vouchers SET printed_at = ? WHERE id = ? AND mosque_id = ?').run(at, id, req.mosqueId);
   }
   res.json({ ok: true, count: ids.length });
 }));
@@ -278,8 +290,9 @@ router.post('/vouchers/printed', requireStaff, asyncHandler(async (req, res) => 
 router.post('/vouchers/redeem', requireStaff, asyncHandler(async (req, res) => {
   const code = String(req.body.code || '').trim().toUpperCase();
   if (!code) return res.status(400).json({ error: 'لم يتم قراءة باركود الشيك' });
-  const voucher = await db.prepare('SELECT * FROM cheque_vouchers WHERE upper(code) = ?').get(code);
-  if (!voucher) return res.status(404).json({ error: `لا يوجد شيك بالباركود ${code}` });
+  const voucher = await db.prepare('SELECT * FROM cheque_vouchers WHERE upper(code) = ? AND mosque_id = ?')
+    .get(code, req.mosqueId);
+  if (!voucher) return res.status(404).json({ error: `لا يوجد شيك بالباركود ${code} في هذا المسجد` });
 
   if (voucher.redeemed_at) {
     const owner = await db.prepare('SELECT name FROM users WHERE id = ?').get(voucher.student_id);
@@ -293,10 +306,10 @@ router.post('/vouchers/redeem', requireStaff, asyncHandler(async (req, res) => {
   const student = studentCode
     ? await db.prepare(`
         SELECT u.*, h.name AS halaqa_name FROM users u LEFT JOIN halaqat h ON h.id = u.halaqa_id
-         WHERE upper(u.barcode) = ? AND u.role = 'student' AND u.active = 1`).get(studentCode)
+         WHERE upper(u.barcode) = ? AND u.role = 'student' AND u.active = 1 AND u.mosque_id = ?`).get(studentCode, req.mosqueId)
     : await db.prepare(`
         SELECT u.*, h.name AS halaqa_name FROM users u LEFT JOIN halaqat h ON h.id = u.halaqa_id
-         WHERE u.id = ? AND u.role = 'student' AND u.active = 1`).get(toInt(req.body.student_id));
+         WHERE u.id = ? AND u.role = 'student' AND u.active = 1 AND u.mosque_id = ?`).get(toInt(req.body.student_id), req.mosqueId);
   if (!student) return res.status(404).json({ error: 'لم يُعثر على الطالب — امسح بطاقته أو اخترها من القائمة' });
 
   const at = nowIso();
@@ -321,15 +334,15 @@ router.post('/vouchers/redeem', requireStaff, asyncHandler(async (req, res) => {
 
 /** حذف الشيكات الفارغة غير المصروفة من دفعة */
 router.delete('/vouchers/batch/:batch', requireStaff, asyncHandler(async (req, res) => {
-  const result = await db.prepare('DELETE FROM cheque_vouchers WHERE batch = ? AND redeemed_at IS NULL')
-    .run(String(req.params.batch));
+  const result = await db.prepare('DELETE FROM cheque_vouchers WHERE batch = ? AND mosque_id = ? AND redeemed_at IS NULL')
+    .run(String(req.params.batch), req.mosqueId);
   res.json({ ok: true, count: result.changes || 0 });
 }));
 
 /** Cancelling a cheque also removes the points it granted. */
 router.delete('/:id', requireStaff, asyncHandler(async (req, res) => {
   const id = toInt(req.params.id);
-  const cheque = await db.prepare('SELECT * FROM cheques WHERE id = ?').get(id);
+  const cheque = await db.prepare('SELECT * FROM cheques WHERE id = ? AND mosque_id = ?').get(id, req.mosqueId);
   if (!cheque) return res.status(404).json({ error: 'الشيك غير موجود' });
   await db.prepare('DELETE FROM point_entries WHERE cheque_id = ?').run(id);
   await db.prepare('DELETE FROM cheques WHERE id = ?').run(id);

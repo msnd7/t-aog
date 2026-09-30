@@ -35,7 +35,7 @@ function chequeMarkup(cheque, settings) {
           <img src="${esc(logo)}" alt="شعار المجمع">
           <div>
             <h1>${esc(settings.academy_name || 'مجمع رياض القرآن التعليمي')}</h1>
-            <p>${esc(settings.academy_subtitle || '')}</p>
+            <p>${esc([settings.mosque_name, settings.academy_subtitle].filter(Boolean).join(' — '))}</p>
           </div>
         </div>
         <div class="cheque__type">

@@ -12,6 +12,20 @@ const dots = document.getElementById('dots');
 const progress = document.querySelector('.progress-line span');
 
 let data = null;
+
+/**
+ * المسجد المعروض: من الرابط (?mosque=2)، وإلا آخر مسجد اختير على هذا الجهاز،
+ * وإلا مسجد المشرف المسجِّل دخوله (يحدده الخادم)، وإلا تظهر قائمة اختيار المسجد.
+ */
+const STORE_KEY = 'rq_screen_mosque';
+const fromUrl = new URLSearchParams(location.search).get('mosque');
+let mosqueId = fromUrl;
+if (!mosqueId) {
+  try { mosqueId = localStorage.getItem(STORE_KEY); } catch { /* التخزين غير متاح */ }
+}
+function remember(id) {
+  try { if (id) localStorage.setItem(STORE_KEY, String(id)); else localStorage.removeItem(STORE_KEY); } catch { /* لا شيء */ }
+}
 let slides = [];
 let index = 0;
 let timer = null;
@@ -156,17 +170,55 @@ function schedule(seconds) {
   restartProgress();
 }
 
+/** اختيار المسجد عند فتح الشاشة أول مرة على جهاز العرض */
+async function chooseMosque() {
+  clearInterval(timer);
+  let mosques = [];
+  try {
+    mosques = (await (await fetch('/api/mosques/public')).json()).mosques || [];
+  } catch { /* لا شيء */ }
+  document.getElementById('subtitle').textContent = 'اختر المسجد لعرض شاشته';
+  stage.innerHTML = `
+    <div class="slide mosque-picker">
+      ${title('mosque', 'اختر المسجد')}
+      <div class="mosque-picker__list">
+        ${mosques.map((m) => `<button type="button" data-mosque="${m.id}">${icon('mosque', { size: 30 })}<span>${esc(m.name)}</span></button>`).join('')
+          || '<div class="empty-slide">لا توجد مساجد</div>'}
+      </div>
+      <p class="mosque-picker__hint">يُحفظ الاختيار على هذا الجهاز، ويمكن تغييره لاحقاً بالمفتاح M</p>
+    </div>`;
+  dots.innerHTML = '';
+  stage.querySelectorAll('[data-mosque]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      mosqueId = button.dataset.mosque;
+      remember(mosqueId);
+      history.replaceState(null, '', `?mosque=${mosqueId}`);
+      load();
+    });
+  });
+}
+
 async function load() {
   try {
-    const response = await fetch('/api/screen?period=week', { credentials: 'same-origin' });
-    if (!response.ok) throw new Error('تعذر تحميل بيانات الشاشة');
-    data = await response.json();
+    const query = mosqueId ? `&mosque=${encodeURIComponent(mosqueId)}` : '';
+    const response = await fetch(`/api/screen?period=week${query}`, { credentials: 'same-origin' });
+    const payload = await response.json().catch(() => ({}));
+    if (payload.mosque_required || (response.status === 400 && mosqueId)) {
+      mosqueId = null;
+      remember(null);
+      return chooseMosque();
+    }
+    if (!response.ok) throw new Error(payload.error || 'تعذر تحميل بيانات الشاشة');
+    data = payload;
   } catch (error) {
     stage.innerHTML = `<div class="empty-slide">${esc(error.message)}</div>`;
     return;
   }
-  document.getElementById('academy').textContent = data.academy.name;
-  document.getElementById('subtitle').textContent = data.academy.subtitle || '';
+  if (fromUrl || mosqueId) remember(data.mosque.id);
+  document.title = `شاشة العرض — ${data.mosque.name}`;
+  document.getElementById('academy').textContent = data.mosque.name;
+  document.getElementById('subtitle').textContent = data.academy.name || '';
   document.getElementById('period').textContent = data.period_label;
   if (data.academy.logo) document.getElementById('logo').src = data.academy.logo;
   buildSlides();
@@ -186,8 +238,9 @@ document.addEventListener('keydown', (event) => {
   if (event.key === ' ' || event.key === 'ArrowLeft') { event.preventDefault(); show(index + 1); }
   if (event.key === 'ArrowRight') { event.preventDefault(); show(index - 1); }
   if (event.key === 'f') document.documentElement.requestFullscreen?.();
+  if (event.key === 'm') { mosqueId = null; remember(null); chooseMosque(); }
 });
-stage.addEventListener('click', () => show(index + 1));
+stage.addEventListener('click', () => { if (data && slides.length) show(index + 1); });
 
 tickClock();
 setInterval(tickClock, 20000);

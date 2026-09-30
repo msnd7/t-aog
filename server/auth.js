@@ -44,6 +44,7 @@ function publicUser(user) {
     halaqa_id: user.halaqa_id,
     photo: user.photo,
     barcode: user.barcode,
+    mosque_id: user.mosque_id || null,
     must_change_code: user.must_change_code === 1
   };
 }
@@ -66,7 +67,9 @@ async function attachUser(req, res, next) {
   if (req.sessionToken) {
     const row = await db.prepare(`
       SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id
+      LEFT JOIN mosques m ON m.id = u.mosque_id
       WHERE s.token = ? AND s.expires_at > ? AND u.active = 1
+        AND (u.role = 'admin' OR m.active = 1)
     `).get(req.sessionToken, nowIso());
     if (row) req.user = row;
   }

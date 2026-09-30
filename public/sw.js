@@ -1,5 +1,5 @@
 /* عامل الخدمة: يتيح تثبيت المنصة كتطبيق وتشغيل الواجهة دون اتصال */
-const CACHE = 'riyad-shell-v3';
+const CACHE = 'riyad-shell-v4';
 const SHELL = [
   '/', '/index.html', '/screen.html', '/print.html', '/cards.html', '/blank.html', '/offline.html',
   '/css/app.css', '/css/screen.css', '/css/print.css', '/css/cards.css', '/css/fonts.css',
@@ -11,6 +11,7 @@ const SHELL = [
   '/js/views/shared.js', '/js/views/dashboard.js', '/js/views/students.js', '/js/views/student-profile.js',
   '/js/views/halaqat.js', '/js/views/cheques.js', '/js/views/scan.js', '/js/views/store.js',
   '/js/views/leaderboard.js', '/js/views/settings.js', '/js/views/my-page.js', '/js/views/my-orders.js',
+  '/js/views/platform.js', '/js/views/platform-settings.js',
   '/vendor/JsBarcode.code128.min.js',
   '/manifest.webmanifest', '/img/logo.jpg', '/img/favicon.png', '/img/icon-192.png', '/img/icon-512.png'
 ];

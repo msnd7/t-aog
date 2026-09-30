@@ -20,33 +20,47 @@ async function phoneTaken(phone, exceptId = null) {
  * إنشاء طالب: يُسجّل المشرف الاسم ورقم الجوال، ويُمنح الطالب الرمز المؤقت
  * ويُطلب منه تغييره عند أول دخول. الباركود يُولَّد تلقائياً للرصد.
  */
-async function createStudent({ name, halaqaId, phone }) {
+async function createStudent({ name, halaqaId, phone, mosqueId }) {
   const created = nowIso();
   const code = await defaultCode();
   const info = await db.prepare(`
-    INSERT INTO users (phone, code_hash, must_change_code, role, name, halaqa_id, active, created_at)
-    VALUES (?, ?, 1, 'student', ?, ?, 1, ?)
+    INSERT INTO users (phone, code_hash, must_change_code, role, name, halaqa_id, active, created_at, mosque_id)
+    VALUES (?, ?, 1, 'student', ?, ?, 1, ?, ?)
     RETURNING id
-  `).run(phone || null, hashCode(code), name, halaqaId || null, created);
+  `).run(phone || null, hashCode(code), name, halaqaId || null, created, mosqueId);
   const id = Number(info.lastInsertRowid);
   const barcode = makeBarcode(id);
   await db.prepare('UPDATE users SET barcode = ? WHERE id = ?').run(barcode, id);
-  return { id, name, phone: phone || null, barcode, code, halaqa_id: halaqaId || null };
+  return { id, name, phone: phone || null, barcode, code, halaqa_id: halaqaId || null, mosque_id: mosqueId };
+}
+
+/** الحلقة المختارة يجب أن تكون من المسجد الحالي؛ يعيد معرّفها أو null */
+async function halaqaInMosque(value, mosqueId) {
+  const id = toInt(value);
+  if (!id) return null;
+  const row = await db.prepare('SELECT id FROM halaqat WHERE id = ? AND mosque_id = ?').get(id, mosqueId);
+  if (!row) {
+    const error = new Error('الحلقة غير موجودة في هذا المسجد');
+    error.status = 400;
+    throw error;
+  }
+  return id;
 }
 
 // ---- listing -------------------------------------------------------------
 
 router.get('/', requireStaff, asyncHandler(async (req, res) => {
   const period = req.query.period || 'week';
-  const { from, to } = await currentRange(period);
+  const { from, to } = await currentRange(period, req.mosqueId);
   const halaqaId = req.query.halaqa ? toInt(req.query.halaqa) : null;
-  let rows = await studentLeaderboard({ from, to, halaqaId });
+  let rows = await studentLeaderboard({ from, to, halaqaId, mosqueId: req.mosqueId });
   const totals = await db.prepare(`
-    SELECT student_id,
-           COALESCE(SUM(CASE WHEN points > 0 THEN points ELSE 0 END), 0) AS earned,
-           COALESCE(SUM(points), 0) AS balance
-      FROM point_entries WHERE student_id IS NOT NULL GROUP BY student_id
-  `).all();
+    SELECT e.student_id,
+           COALESCE(SUM(CASE WHEN e.points > 0 THEN e.points ELSE 0 END), 0) AS earned,
+           COALESCE(SUM(e.points), 0) AS balance
+      FROM point_entries e JOIN users u ON u.id = e.student_id
+     WHERE u.mosque_id = ? GROUP BY e.student_id
+  `).all(req.mosqueId);
   const byId = new Map(totals.map((t) => [t.student_id, t]));
   rows = rows.map((row) => ({
     ...row,
@@ -73,8 +87,8 @@ router.get('/:id', requireAuth, asyncHandler(async (req, res) => {
     SELECT u.id, u.name, u.phone, u.photo, u.barcode, u.halaqa_id, u.active, u.created_at, u.must_change_code,
            h.name AS halaqa_name, h.teacher_name
       FROM users u LEFT JOIN halaqat h ON h.id = u.halaqa_id
-     WHERE u.id = ? AND u.role = 'student'
-  `).get(id);
+     WHERE u.id = ? AND u.role = 'student' AND u.mosque_id = ?
+  `).get(id, req.mosqueId);
   if (!student) return res.status(404).json({ error: 'الطالب غير موجود' });
 
   const entries = await db.prepare(`
@@ -83,12 +97,12 @@ router.get('/:id', requireAuth, asyncHandler(async (req, res) => {
      WHERE e.student_id = ? ORDER BY e.created_at DESC, e.id DESC LIMIT 80
   `).all(id);
   const cheques = await db.prepare('SELECT * FROM cheques WHERE student_id = ? ORDER BY id DESC LIMIT 30').all(id);
-  const weekBoard = await studentLeaderboard({ ...(await currentRange('week')) });
+  const weekBoard = await studentLeaderboard({ ...(await currentRange('week', req.mosqueId)), mosqueId: req.mosqueId });
   res.json({
     student,
     wallet: await studentWallet(id),
     week_points: weekBoard.find((s) => s.id === id)?.points || 0,
-    rank: await studentRank(id, 'week'),
+    rank: await studentRank(id, 'week', req.mosqueId),
     entries,
     cheques: cheques.map((c) => ({ ...c, items: JSON.parse(c.items) }))
   });
@@ -105,7 +119,8 @@ router.post('/', requireStaff, asyncHandler(async (req, res) => {
     if (!phone) return res.status(400).json({ error: 'رقم الجوال غير صحيح، مثال: 0501234567' });
     if (await phoneTaken(phone)) return res.status(409).json({ error: 'رقم الجوال مسجَّل لحساب آخر' });
   }
-  const student = await createStudent({ name, halaqaId: toInt(req.body.halaqa_id) || null, phone });
+  const halaqaId = await halaqaInMosque(req.body.halaqa_id, req.mosqueId);
+  const student = await createStudent({ name, halaqaId, phone, mosqueId: req.mosqueId });
   res.status(201).json({ student });
 }));
 
@@ -113,7 +128,7 @@ router.post('/', requireStaff, asyncHandler(async (req, res) => {
  * إضافة دفعة: كل سطر «اسم الطالب, رقم الجوال» (الرقم اختياري).
  */
 router.post('/bulk', requireStaff, asyncHandler(async (req, res) => {
-  const halaqaId = toInt(req.body.halaqa_id) || null;
+  const halaqaId = await halaqaInMosque(req.body.halaqa_id, req.mosqueId);
   const lines = String(req.body.names || '').split('\n').map((line) => line.trim()).filter(Boolean);
   if (!lines.length) return res.status(400).json({ error: 'أدخل أسماء الطلاب، سطر لكل طالب' });
 
@@ -129,7 +144,7 @@ router.post('/bulk', requireStaff, asyncHandler(async (req, res) => {
       if (!phone) { skipped.push({ line, reason: 'رقم جوال غير صحيح' }); continue; }
       if (await phoneTaken(phone)) { skipped.push({ line, reason: 'رقم الجوال مكرر' }); continue; }
     }
-    created.push(await createStudent({ name, halaqaId, phone }));
+    created.push(await createStudent({ name, halaqaId, phone, mosqueId: req.mosqueId }));
   }
   if (!created.length) return res.status(400).json({ error: 'لم تتم إضافة أي طالب', skipped });
   res.status(201).json({ created, count: created.length, skipped });
@@ -139,7 +154,7 @@ router.post('/bulk', requireStaff, asyncHandler(async (req, res) => {
 
 router.patch('/:id', requireAuth, asyncHandler(async (req, res) => {
   const id = toInt(req.params.id);
-  const student = await db.prepare("SELECT * FROM users WHERE id = ? AND role = 'student'").get(id);
+  const student = await db.prepare("SELECT * FROM users WHERE id = ? AND role = 'student' AND mosque_id = ?").get(id, req.mosqueId);
   if (!student) return res.status(404).json({ error: 'الطالب غير موجود' });
   const staff = isStaff(req.user);
   if (!staff && req.user.id !== id) return res.status(403).json({ error: 'غير مصرح' });
@@ -148,7 +163,7 @@ router.patch('/:id', requireAuth, asyncHandler(async (req, res) => {
   const fields = [];
   const params = [];
   if (req.body.name !== undefined) { fields.push('name = ?'); params.push(String(req.body.name).trim()); }
-  if (req.body.halaqa_id !== undefined) { fields.push('halaqa_id = ?'); params.push(toInt(req.body.halaqa_id) || null); }
+  if (req.body.halaqa_id !== undefined) { fields.push('halaqa_id = ?'); params.push(await halaqaInMosque(req.body.halaqa_id, req.mosqueId)); }
   if (req.body.active !== undefined) { fields.push('active = ?'); params.push(req.body.active ? 1 : 0); }
   if (req.body.phone !== undefined) {
     const raw = String(req.body.phone || '').trim();
@@ -173,7 +188,7 @@ router.patch('/:id', requireAuth, asyncHandler(async (req, res) => {
 /** إعادة الرمز إلى الرمز المؤقت وإجبار الطالب على تغييره عند الدخول */
 router.post('/:id/reset-code', requireStaff, asyncHandler(async (req, res) => {
   const id = toInt(req.params.id);
-  const student = await db.prepare("SELECT * FROM users WHERE id = ? AND role = 'student'").get(id);
+  const student = await db.prepare("SELECT * FROM users WHERE id = ? AND role = 'student' AND mosque_id = ?").get(id, req.mosqueId);
   if (!student) return res.status(404).json({ error: 'الطالب غير موجود' });
   const code = await defaultCode();
   await db.prepare('UPDATE users SET code_hash = ?, must_change_code = 1 WHERE id = ?').run(hashCode(code), id);
@@ -186,6 +201,8 @@ router.post('/:id/photo', requireAuth, upload.single('photo'), asyncHandler(asyn
   const id = toInt(req.params.id);
   if (!isStaff(req.user) && req.user.id !== id) return res.status(403).json({ error: 'غير مصرح' });
   if (!req.file) return res.status(400).json({ error: 'لم يتم اختيار صورة' });
+  const owner = await db.prepare("SELECT id FROM users WHERE id = ? AND role = 'student' AND mosque_id = ?").get(id, req.mosqueId);
+  if (!owner) return res.status(404).json({ error: 'الطالب غير موجود' });
   const url = uploadUrl(req.file.filename);
   await db.prepare('UPDATE users SET photo = ? WHERE id = ?').run(url, id);
   res.json({ ok: true, photo: url });
@@ -193,6 +210,8 @@ router.post('/:id/photo', requireAuth, upload.single('photo'), asyncHandler(asyn
 
 router.delete('/:id', requireStaff, asyncHandler(async (req, res) => {
   const id = toInt(req.params.id);
+  const student = await db.prepare("SELECT id FROM users WHERE id = ? AND role = 'student' AND mosque_id = ?").get(id, req.mosqueId);
+  if (!student) return res.status(404).json({ error: 'الطالب غير موجود' });
   const hasEntries = await db.prepare('SELECT 1 FROM point_entries WHERE student_id = ? LIMIT 1').get(id);
   if (hasEntries) {
     await db.prepare('UPDATE users SET active = 0 WHERE id = ?').run(id);

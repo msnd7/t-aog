@@ -246,7 +246,8 @@ CREATE TABLE IF NOT EXISTS users (
   photo            TEXT,
   barcode          TEXT UNIQUE,
   active           INTEGER NOT NULL DEFAULT 1,
-  created_at       TEXT NOT NULL
+  created_at       TEXT NOT NULL,
+  mosque_id        INTEGER REFERENCES mosques(id)
 );`;
 
 /**
@@ -274,13 +275,30 @@ function migrateUsersToPhoneLoginSqlite() {
 }
 
 const SQLITE_SCHEMA = `
+-- المساجد (الجوامع): لكل مسجد واجهته وحلقاته وطلابه ومتجره وإعداداته الخاصة
+CREATE TABLE IF NOT EXISTS mosques (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT NOT NULL,
+  active     INTEGER NOT NULL DEFAULT 1,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS mosque_settings (
+  mosque_id INTEGER NOT NULL REFERENCES mosques(id) ON DELETE CASCADE,
+  key       TEXT NOT NULL,
+  value     TEXT,
+  PRIMARY KEY (mosque_id, key)
+);
+
 CREATE TABLE IF NOT EXISTS halaqat (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   name          TEXT NOT NULL,
   teacher_name  TEXT,
   supervisor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
   active        INTEGER NOT NULL DEFAULT 1,
-  created_at    TEXT NOT NULL
+  created_at    TEXT NOT NULL,
+  mosque_id     INTEGER REFERENCES mosques(id)
 );
 
 ${SQLITE_USERS_TABLE}
@@ -297,7 +315,8 @@ CREATE TABLE IF NOT EXISTS cheques (
   note         TEXT,
   issued_by    INTEGER REFERENCES users(id) ON DELETE SET NULL,
   issued_at    TEXT NOT NULL,
-  printed_at   TEXT
+  printed_at   TEXT,
+  mosque_id    INTEGER REFERENCES mosques(id)
 );
 
 -- دفاتر الشيكات الفارغة: تُطبع بكميات كبيرة بنوع وقيمة محددة، ويكتب المعلم
@@ -316,7 +335,8 @@ CREATE TABLE IF NOT EXISTS cheque_vouchers (
   printed_at  TEXT,
   student_id  INTEGER REFERENCES users(id) ON DELETE SET NULL,
   redeemed_at TEXT,
-  redeemed_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+  redeemed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  mosque_id   INTEGER REFERENCES mosques(id)
 );
 CREATE INDEX IF NOT EXISTS idx_vouchers_batch ON cheque_vouchers(batch);
 CREATE INDEX IF NOT EXISTS idx_vouchers_student ON cheque_vouchers(student_id);
@@ -331,7 +351,8 @@ CREATE TABLE IF NOT EXISTS point_entries (
   note       TEXT,
   cheque_id  INTEGER REFERENCES cheques(id) ON DELETE SET NULL,
   created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  mosque_id  INTEGER REFERENCES mosques(id)
 );
 CREATE INDEX IF NOT EXISTS idx_entries_student ON point_entries(student_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_entries_halaqa  ON point_entries(halaqa_id, created_at);
@@ -344,7 +365,8 @@ CREATE TABLE IF NOT EXISTS rewards (
   image       TEXT,
   stock       INTEGER NOT NULL DEFAULT -1,
   active      INTEGER NOT NULL DEFAULT 1,
-  created_at  TEXT NOT NULL
+  created_at  TEXT NOT NULL,
+  mosque_id   INTEGER REFERENCES mosques(id)
 );
 
 CREATE TABLE IF NOT EXISTS redemptions (
@@ -387,6 +409,21 @@ CREATE TABLE IF NOT EXISTS settings (
  * الجدولين عبر ALTER TABLE، لأن Postgres يتطلب وجود الجدول المُشار إليه مسبقاً.
  */
 const PG_SCHEMA = `
+CREATE TABLE IF NOT EXISTS mosques (
+  id         SERIAL PRIMARY KEY,
+  name       TEXT NOT NULL,
+  active     INTEGER NOT NULL DEFAULT 1,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS mosque_settings (
+  mosque_id INTEGER NOT NULL REFERENCES mosques(id) ON DELETE CASCADE,
+  key       TEXT NOT NULL,
+  value     TEXT,
+  PRIMARY KEY (mosque_id, key)
+);
+
 CREATE TABLE IF NOT EXISTS users (
   id               SERIAL PRIMARY KEY,
   phone            TEXT UNIQUE,
@@ -398,7 +435,8 @@ CREATE TABLE IF NOT EXISTS users (
   photo            TEXT,
   barcode          TEXT UNIQUE,
   active           INTEGER NOT NULL DEFAULT 1,
-  created_at       TEXT NOT NULL
+  created_at       TEXT NOT NULL,
+  mosque_id        INTEGER REFERENCES mosques(id)
 );
 
 CREATE TABLE IF NOT EXISTS halaqat (
@@ -407,7 +445,8 @@ CREATE TABLE IF NOT EXISTS halaqat (
   teacher_name  TEXT,
   supervisor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
   active        INTEGER NOT NULL DEFAULT 1,
-  created_at    TEXT NOT NULL
+  created_at    TEXT NOT NULL,
+  mosque_id     INTEGER REFERENCES mosques(id)
 );
 
 DO $do$
@@ -431,7 +470,8 @@ CREATE TABLE IF NOT EXISTS cheques (
   note         TEXT,
   issued_by    INTEGER REFERENCES users(id) ON DELETE SET NULL,
   issued_at    TEXT NOT NULL,
-  printed_at   TEXT
+  printed_at   TEXT,
+  mosque_id    INTEGER REFERENCES mosques(id)
 );
 
 CREATE TABLE IF NOT EXISTS cheque_vouchers (
@@ -448,7 +488,8 @@ CREATE TABLE IF NOT EXISTS cheque_vouchers (
   printed_at  TEXT,
   student_id  INTEGER REFERENCES users(id) ON DELETE SET NULL,
   redeemed_at TEXT,
-  redeemed_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+  redeemed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  mosque_id   INTEGER REFERENCES mosques(id)
 );
 CREATE INDEX IF NOT EXISTS idx_vouchers_batch ON cheque_vouchers(batch);
 CREATE INDEX IF NOT EXISTS idx_vouchers_student ON cheque_vouchers(student_id);
@@ -463,7 +504,8 @@ CREATE TABLE IF NOT EXISTS point_entries (
   note       TEXT,
   cheque_id  INTEGER REFERENCES cheques(id) ON DELETE SET NULL,
   created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  mosque_id  INTEGER REFERENCES mosques(id)
 );
 CREATE INDEX IF NOT EXISTS idx_entries_student ON point_entries(student_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_entries_halaqa  ON point_entries(halaqa_id, created_at);
@@ -476,7 +518,8 @@ CREATE TABLE IF NOT EXISTS rewards (
   image       TEXT,
   stock       INTEGER NOT NULL DEFAULT -1,
   active      INTEGER NOT NULL DEFAULT 1,
-  created_at  TEXT NOT NULL
+  created_at  TEXT NOT NULL,
+  mosque_id   INTEGER REFERENCES mosques(id)
 );
 
 CREATE TABLE IF NOT EXISTS redemptions (
@@ -538,6 +581,86 @@ async function seedDefaultSettings() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// تعدد المساجد
+// ---------------------------------------------------------------------------
+
+/**
+ * المساجد الافتراضية. الأول هو المسجد الذي كانت المنصة تعمل له قبل تعدد المساجد،
+ * فتُنقل إليه كل البيانات القائمة (الحلقات والطلاب والنقاط والشيكات والمتجر).
+ */
+const DEFAULT_MOSQUES = ['جامع عبدالله بن عمر', 'جامع ماجد بن مترك', 'جامع تركي الضحيان'];
+
+/** الجداول التي تحمل عمود mosque_id */
+const MOSQUE_TABLES = ['halaqat', 'users', 'cheques', 'cheque_vouchers', 'point_entries', 'rewards'];
+
+/**
+ * إعدادات خاصة بكل مسجد. بقية الإعدادات (اسم المجمع، الشعار، الرمز المؤقت)
+ * مشتركة على مستوى المنصة.
+ */
+const MOSQUE_SETTING_KEYS = [
+  'currency', 'scan_points', 'scan_cooldown_seconds', 'week_start_day',
+  'cheque_attendance_early', 'cheque_attendance_general', 'cheque_recitation_hifz',
+  'cheque_recitation_review', 'cheque_recitation_both', 'cheque_discipline',
+  'screen_rotate_seconds', 'allow_student_photo_upload', 'public_screen'
+];
+
+async function columnExists(table, column) {
+  if (engineKind === 'pg') {
+    return !!(await rawGet(
+      'SELECT 1 FROM information_schema.columns WHERE table_name = ? AND column_name = ?', [table, column]));
+  }
+  return (await rawAll(`PRAGMA table_info(${table})`, [])).some((col) => col.name === column);
+}
+
+/**
+ * ترقية تعدد المساجد (مرة واحدة): يضيف عمود mosque_id للقواعد القديمة، وينشئ
+ * المساجد الثلاثة، وينسب كل البيانات السابقة إلى المسجد الأول مع نسخ قيم
+ * إعداداته الحالية إليه حتى لا تتأثر بأي تعديل لاحق. حساب المدير يبقى بلا مسجد
+ * لأنه مدير المنصة كلها.
+ */
+async function migrateMosques() {
+  for (const table of MOSQUE_TABLES) {
+    if (!(await columnExists(table, 'mosque_id'))) {
+      await rawExec(`ALTER TABLE ${table} ADD COLUMN mosque_id INTEGER REFERENCES mosques(id)`);
+    }
+  }
+  for (const table of MOSQUE_TABLES) {
+    await rawExec(`CREATE INDEX IF NOT EXISTS idx_${table}_mosque ON ${table}(mosque_id)`);
+  }
+
+  const done = await rawGet("SELECT value FROM settings WHERE key = 'mosques_migrated'", []);
+  if (done) return;
+
+  let first = await rawGet('SELECT id FROM mosques ORDER BY id LIMIT 1', []);
+  if (!first) {
+    // معرّفات ثابتة مع ON CONFLICT: إن تزامن تشغيلان باردان (Vercel) لا تتكرر المساجد
+    const at = new Date().toISOString();
+    for (const [index, name] of DEFAULT_MOSQUES.entries()) {
+      await rawRun('INSERT INTO mosques (id, name, active, sort_order, created_at) VALUES (?, ?, 1, ?, ?) ON CONFLICT (id) DO NOTHING',
+        [index + 1, name, index + 1, at]);
+    }
+    if (engineKind === 'pg') {
+      await rawExec("SELECT setval(pg_get_serial_sequence('mosques', 'id'), (SELECT MAX(id) FROM mosques))");
+    }
+    first = await rawGet('SELECT id FROM mosques ORDER BY id LIMIT 1', []);
+  }
+  const firstId = first.id;
+
+  for (const table of MOSQUE_TABLES) {
+    const extra = table === 'users' ? " AND role <> 'admin'" : '';
+    await rawRun(`UPDATE ${table} SET mosque_id = ? WHERE mosque_id IS NULL${extra}`, [firstId]);
+  }
+  for (const key of MOSQUE_SETTING_KEYS) {
+    const row = await rawGet('SELECT value FROM settings WHERE key = ?', [key]);
+    if (row) {
+      await rawRun('INSERT INTO mosque_settings (mosque_id, key, value) VALUES (?, ?, ?) ON CONFLICT (mosque_id, key) DO NOTHING',
+        [firstId, key, row.value]);
+    }
+  }
+  await rawRun("INSERT INTO settings (key, value) VALUES ('mosques_migrated', '1') ON CONFLICT (key) DO NOTHING", []);
+}
+
 async function initSchema() {
   if (engineKind === 'pg') {
     await rawExec(PG_SCHEMA);
@@ -548,6 +671,7 @@ async function initSchema() {
     rawDb.exec(SQLITE_SCHEMA);
   }
   await seedDefaultSettings();
+  await migrateMosques();
 }
 
 /**
@@ -610,15 +734,28 @@ const db = {
   async exec(sql) { await schemaReady(); return withRetry(() => rawExec(sql)); }
 };
 
-async function getSettings() {
+/**
+ * الإعدادات الفعّالة: الافتراضية ← إعدادات المنصة ← إعدادات المسجد (إن مُرِّر mosqueId).
+ * إعدادات المسجد (قيم الشيكات والمسح…) لا تُورث من جدول المنصة، فيبدأ المسجد
+ * الجديد بالقيم الافتراضية لا بقيم مسجد آخر.
+ */
+async function getSettings(mosqueId = null) {
   const rows = await db.prepare('SELECT key, value FROM settings').all();
   const out = { ...DEFAULT_SETTINGS };
-  for (const row of rows) out[row.key] = row.value;
+  const perMosque = new Set(MOSQUE_SETTING_KEYS);
+  for (const row of rows) {
+    if (mosqueId && perMosque.has(row.key)) continue;
+    out[row.key] = row.value;
+  }
+  if (mosqueId) {
+    const own = await db.prepare('SELECT key, value FROM mosque_settings WHERE mosque_id = ?').all(mosqueId);
+    for (const row of own) out[row.key] = row.value;
+  }
   return out;
 }
 
-async function getSetting(key) {
-  return (await getSettings())[key];
+async function getSetting(key, mosqueId = null) {
+  return (await getSettings(mosqueId))[key];
 }
 
 async function setSetting(key, value) {
@@ -626,7 +763,12 @@ async function setSetting(key, value) {
     .run(key, String(value));
 }
 
+async function setMosqueSetting(mosqueId, key, value) {
+  await db.prepare(`INSERT INTO mosque_settings (mosque_id, key, value) VALUES (?, ?, ?)
+    ON CONFLICT(mosque_id, key) DO UPDATE SET value = excluded.value`).run(mosqueId, key, String(value));
+}
+
 module.exports = {
   db, get ready() { return schemaReady(); }, DATA_DIR, UPLOAD_DIR, REMOTE_DB, UPLOADS_IN_DB,
-  getSettings, getSetting, setSetting, DEFAULT_SETTINGS
+  getSettings, getSetting, setSetting, setMosqueSetting, DEFAULT_SETTINGS, MOSQUE_SETTING_KEYS, DEFAULT_MOSQUES
 };

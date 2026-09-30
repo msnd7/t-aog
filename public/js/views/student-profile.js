@@ -64,7 +64,7 @@ export async function render({ params, state }) {
           </div>
           ${studentCardMarkup(student, {
         logo: state.settings.logo || '/img/logo.jpg',
-        academy: state.settings.academy_name || 'رياض القرآن',
+        academy: state.settings.mosque_name || state.settings.academy_name || 'رياض القرآن',
         points: wallet.balance
       })}
         </div>

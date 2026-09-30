@@ -23,7 +23,11 @@ let app;
 let db;
 let server;
 let base;
+// مخزن ملفات تعريف الارتباط: الجلسة ومسجد المدير الحالي
+const jar = new Map();
 let cookie = '';
+const syncCookie = () => { cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; '); };
+const resetCookies = () => { jar.clear(); cookie = ''; };
 
 async function call(method, url, body, form) {
   const options = { method, headers: {} };
@@ -35,8 +39,12 @@ async function call(method, url, body, form) {
   }
   const response = await fetch(base + url, options);
   for (const raw of (response.headers.getSetCookie ? response.headers.getSetCookie() : [])) {
-    cookie = raw.split(';')[0];
+    const [pair] = raw.split(';');
+    const idx = pair.indexOf('=');
+    const value = pair.slice(idx + 1);
+    if (value) jar.set(pair.slice(0, idx), value); else jar.delete(pair.slice(0, idx));
   }
+  syncCookie();
   const text = await response.text();
   let payload = null;
   try { payload = JSON.parse(text); } catch { payload = text; }
@@ -57,6 +65,8 @@ test.before(async (t) => {
   assert.equal(login.status, 200);
   const changed = await call('POST', '/api/auth/code', { current: '1234', next: '4321' });
   assert.equal(changed.status, 200);
+  const entered = await call('POST', '/api/mosques/enter', { id: 1 });
+  assert.equal(entered.status, 200);
 });
 
 test.after(() => {

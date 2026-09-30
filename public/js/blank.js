@@ -33,7 +33,7 @@ function chequeMarkup(voucher, showHalaqa) {
           <img src="${esc(logo)}" alt="">
           <div class="bcheque__academy">
             <strong>${esc(settings.academy_name || 'مجمع رياض القرآن التعليمي')}</strong>
-            <span>${esc(settings.academy_subtitle || '')}</span>
+            <span>${esc([settings.mosque_name, settings.academy_subtitle].filter(Boolean).join(' — '))}</span>
           </div>
           <span class="bcheque__title">${esc(voucher.book_title)} — ${esc(voucher.item_label)}</span>
         </header>

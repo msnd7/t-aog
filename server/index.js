@@ -4,6 +4,7 @@ const express = require('express');
 const { db, DATA_DIR, UPLOAD_DIR, getSettings } = require('./db');
 const { readFromDatabase, UPLOADS_IN_DB } = require('./upload');
 const { attachUser, hashCode } = require('./auth');
+const { attachMosque, requireMosque } = require('./mosque');
 const { nowIso, normalizePhone, formatPhone, asyncHandler } = require('./util');
 
 const app = express();
@@ -13,6 +14,7 @@ app.set('trust proxy', 1);
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: false }));
 app.use(asyncHandler(attachUser));
+app.use(asyncHandler(attachMosque));
 
 /**
  * ينشئ حساب المدير الأول ليتمكن من تسجيل بقية المشرفين والطلاب.
@@ -72,13 +74,16 @@ if (UPLOADS_IN_DB) {
 }
 app.use('/uploads', express.static(UPLOAD_DIR, { maxAge: '7d' }));
 
+// كل بيانات الحلقات والطلاب والنقاط والشيكات والمتجر تخص مسجداً واحداً
+const inMosque = requireMosque();
 app.use('/api/auth', require('./routes/auth'));
-app.use('/api/students', require('./routes/students').router);
-app.use('/api/halaqat', require('./routes/halaqat'));
-app.use('/api/points', require('./routes/points').router);
-app.use('/api/cheques', require('./routes/cheques'));
-app.use('/api/store', require('./routes/store'));
-app.use('/api/screen', require('./routes/screens'));
+app.use('/api/mosques', require('./routes/mosques'));
+app.use('/api/students', inMosque, require('./routes/students').router);
+app.use('/api/halaqat', inMosque, require('./routes/halaqat'));
+app.use('/api/points', inMosque, require('./routes/points').router);
+app.use('/api/cheques', inMosque, require('./routes/cheques'));
+app.use('/api/store', inMosque, require('./routes/store'));
+app.use('/api/screen', requireMosque({ allowAnonymous: true }), require('./routes/screens'));
 app.use('/api/settings', require('./routes/settings'));
 
 app.get('/api/health', (req, res) => res.json({ ok: true, time: nowIso() }));

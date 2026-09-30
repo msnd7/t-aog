@@ -3,6 +3,7 @@
  * Fills the database with a realistic demo: circles, students, cheques,
  * scans and store rewards — handy for trying the screens before the real
  * data is entered. Run with:  npm run seed
+ * البيانات تُضاف للمسجد الأول، أو لمسجد محدد:  npm run seed -- --mosque=2
  */
 const { db } = require('../server/db');
 const { ensureAdmin } = require('../server/index');
@@ -51,10 +52,19 @@ async function backdate(entryId, iso) {
 
 async function run() {
   await ensureAdmin();
-  const existingRow = await db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'student'").get();
+  const wanted = Number((process.argv.find((a) => a.startsWith('--mosque=')) || '').split('=')[1]) || null;
+  const mosque = wanted
+    ? await db.prepare('SELECT id, name FROM mosques WHERE id = ?').get(wanted)
+    : await db.prepare('SELECT id, name FROM mosques ORDER BY sort_order, id LIMIT 1').get();
+  if (!mosque) {
+    console.log('المسجد المطلوب غير موجود.');
+    return;
+  }
+  const mosqueId = mosque.id;
+  const existingRow = await db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'student' AND mosque_id = ?").get(mosqueId);
   const existing = Number(existingRow.n);
   if (existing > 0 && !process.argv.includes('--force')) {
-    console.log(`يوجد ${existing} طالباً في قاعدة البيانات. استخدم --force لإضافة بيانات تجريبية فوقها.`);
+    console.log(`يوجد ${existing} طالباً في ${mosque.name}. استخدم --force لإضافة بيانات تجريبية فوقها.`);
     return;
   }
   const admin = await db.prepare("SELECT id FROM users WHERE role = 'admin' ORDER BY id LIMIT 1").get();
@@ -62,9 +72,9 @@ async function run() {
   const halaqaIds = [];
   for (const h of HALAQAT) {
     const info = await db.prepare(`
-      INSERT INTO halaqat (name, teacher_name, active, created_at) VALUES (?, ?, 1, ?)
+      INSERT INTO halaqat (name, teacher_name, active, created_at, mosque_id) VALUES (?, ?, 1, ?, ?)
       RETURNING id
-    `).run(h.name, h.teacher_name, nowIso());
+    `).run(h.name, h.teacher_name, nowIso(), mosqueId);
     halaqaIds.push(Number(info.lastInsertRowid));
   }
 
@@ -73,7 +83,8 @@ async function run() {
     students.push(await createStudent({
       name,
       halaqaId: halaqaIds[index % halaqaIds.length],
-      phone: `055${String(1000001 + index).padStart(7, '0')}`
+      phone: `05${mosqueId}${String(1000001 + index).padStart(7, '0')}`,
+      mosqueId
     }));
   }
 
@@ -118,11 +129,11 @@ async function run() {
 
   for (const reward of REWARDS) {
     await db.prepare(`
-      INSERT INTO rewards (name, description, price, stock, active, created_at) VALUES (?, ?, ?, ?, 1, ?)
-    `).run(reward.name, reward.description, reward.price, -1, nowIso());
+      INSERT INTO rewards (name, description, price, stock, active, created_at, mosque_id) VALUES (?, ?, ?, ?, 1, ?, ?)
+    `).run(reward.name, reward.description, reward.price, -1, nowIso(), mosqueId);
   }
 
-  console.log(`تمت التهيئة: ${halaqaIds.length} حلقات، ${students.length} طالباً، ${REWARDS.length} جوائز.`);
+  console.log(`تمت التهيئة في ${mosque.name}: ${halaqaIds.length} حلقات، ${students.length} طالباً، ${REWARDS.length} جوائز.`);
   console.log('نموذج لحساب طالب: رقم الجوال', students[0].phone, '— الرمز المؤقت', students[0].code);
 }
 
