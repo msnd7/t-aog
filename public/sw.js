@@ -1,5 +1,5 @@
 /* عامل الخدمة: يتيح تثبيت المنصة كتطبيق وتشغيل الواجهة دون اتصال */
-const CACHE = 'riyad-shell-v4';
+const CACHE = 'riyad-shell-v5';
 const SHELL = [
   '/', '/index.html', '/screen.html', '/print.html', '/cards.html', '/blank.html', '/offline.html',
   '/css/app.css', '/css/screen.css', '/css/print.css', '/css/cards.css', '/css/fonts.css',

@@ -271,6 +271,67 @@ test('المتجر: الاستبدال يخصم النقاط والرفض يعي
   assert.equal(after.body.wallet.balance, before.body.wallet.balance);
 });
 
+test('المتجر: إقفال الشراء وفتحه لكل جائزة وللمتجر كله', async () => {
+  const reward = await call('POST', '/api/store/rewards', { name: 'قلم', price: 25, purchasable: '0' });
+  assert.equal(reward.status, 201);
+  const rewardId = reward.body.reward.id;
+  assert.equal(reward.body.reward.purchasable, 0);
+
+  // الجائزة ظاهرة لكن شراؤها مقفل حتى يفتحه المشرف
+  const locked = await call('POST', `/api/store/rewards/${rewardId}/redeem`, { student_id: studentId });
+  assert.equal(locked.status, 400);
+  await call('PATCH', `/api/store/rewards/${rewardId}`, { purchasable: '1' });
+
+  // إقفال المتجر كله يمنع الشراء مع بقاء الجوائز ظاهرة
+  const closed = await call('POST', '/api/store/status', { open: false });
+  assert.equal(closed.body.store_open, false);
+  const list = await call('GET', '/api/store/rewards');
+  assert.equal(list.body.store_open, false);
+  assert.ok(list.body.rewards.some((r) => r.id === rewardId));
+  const blocked = await call('POST', `/api/store/rewards/${rewardId}/redeem`, { student_id: studentId });
+  assert.equal(blocked.status, 400);
+
+  await call('POST', '/api/store/status', { open: true });
+  const bought = await call('POST', `/api/store/rewards/${rewardId}/redeem`, { student_id: studentId });
+  assert.equal(bought.status, 201);
+
+  // حذف جائزة سبق طلبها يخفيها من المتجر ويُبقي الطلب في السجل
+  const removed = await call('DELETE', `/api/store/rewards/${rewardId}`);
+  assert.equal(removed.body.deleted, true);
+  const all = await call('GET', '/api/store/rewards?all=1');
+  assert.ok(!all.body.rewards.some((r) => r.id === rewardId));
+  const orders = await call('GET', `/api/store/redemptions?student_id=${studentId}`);
+  assert.ok(orders.body.redemptions.some((r) => r.reward_id === rewardId));
+  await call('POST', `/api/store/redemptions/${orders.body.redemptions[0].id}/status`, { status: 'rejected' });
+});
+
+test('شاشة العرض: اختيار الفترة أسبوعاً أو شهراً أو من تاريخ أو كل الأيام', async () => {
+  const bad = await call('PATCH', '/api/screen/settings', { screen_period: 'since', screen_from: '' });
+  assert.equal(bad.status, 400);
+
+  const month = await call('PATCH', '/api/screen/settings', { screen_period: 'month' });
+  assert.equal(month.status, 200);
+  let screen = await call('GET', '/api/screen');
+  assert.equal(screen.body.period, 'month');
+  assert.equal(screen.body.titles.knight, 'فارس الشهر');
+
+  const since = await call('PATCH', '/api/screen/settings', { screen_period: 'since', screen_from: '2020-01-01' });
+  assert.equal(since.status, 200);
+  screen = await call('GET', '/api/screen');
+  assert.equal(screen.body.period, 'since');
+  assert.ok(screen.body.range.from.startsWith('2019-12-31') || screen.body.range.from.startsWith('2020-01-01'));
+  assert.equal(screen.body.range.to, null);
+  assert.equal(screen.body.knight.id, studentId);
+
+  await call('PATCH', '/api/screen/settings', { screen_period: 'all' });
+  screen = await call('GET', '/api/screen');
+  assert.equal(screen.body.range.from, null);
+  // الرابط يتجاوز الإعداد المحفوظ
+  screen = await call('GET', '/api/screen?period=week');
+  assert.equal(screen.body.titles.knight, 'فارس الأسبوع');
+  await call('PATCH', '/api/screen/settings', { screen_period: 'week' });
+});
+
 test('الطالب يدخل برقم جواله ولا يرى غير صفحته', async () => {
   const other = await call('POST', '/api/students', { name: 'طالب آخر', halaqa_id: halaqaId });
   const otherId = other.body.student.id;

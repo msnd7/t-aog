@@ -39,14 +39,18 @@ function photo(person, cls = '') {
 
 const title = (name, text) => `<h2 class="slide__title">${icon(name, { size: 44, stroke: 1.6 })}<span class="ttl">${esc(text)}</span></h2>`;
 
-/** فارس الأسبوع مع الوصيفين */
+/** عناوين الجائزتين حسب الفترة المختارة في إعدادات الشاشة (أسبوع، شهر، من تاريخ، كل الأيام) */
+const titles = () => data.titles || { knight: 'فارس الأسبوع', halaqa: 'حلقة الأسبوع' };
+
+/** فارس الفترة مع الوصيفين */
 function knightSlide() {
   const knight = data.knight;
   if (!knight) return null;
   const runners = (data.students || []).filter((student) => student.id !== knight.id).slice(0, 2);
   return () => `
     <div class="slide">
-      ${title('medal', 'فارس الأسبوع')}
+      ${title('medal', titles().knight)}
+      <p class="slide__sub">${esc(data.period_label)}</p>
       <div class="knight">
         <div class="knight__frame">
           ${knight.photo
@@ -75,7 +79,8 @@ function halaqaSlide() {
   if (!halaqa) return null;
   return () => `
     <div class="slide halaqa-card">
-      ${title('mosque', 'حلقة الأسبوع')}
+      ${title('mosque', titles().halaqa)}
+      <p class="slide__sub">${esc(data.period_label)}</p>
       <div class="name">${esc(halaqa.name)}</div>
       <div class="teacher">${esc(halaqa.teacher_name || '')}</div>
       <div class="knight__points">${icon('groups', { size: 26 })} ${nb(halaqa.points)} نقطة · ${nb(halaqa.students_count)} طلاب</div>
@@ -201,8 +206,12 @@ async function chooseMosque() {
 
 async function load() {
   try {
-    const query = mosqueId ? `&mosque=${encodeURIComponent(mosqueId)}` : '';
-    const response = await fetch(`/api/screen?period=week${query}`, { credentials: 'same-origin' });
+    // الفترة من إعدادات الشاشة، ويمكن تجاوزها من الرابط: ?period=month أو ?period=since&from=2025-09-01
+    const params = new URLSearchParams();
+    if (mosqueId) params.set('mosque', mosqueId);
+    const urlParams = new URLSearchParams(location.search);
+    for (const key of ['period', 'from']) if (urlParams.get(key)) params.set(key, urlParams.get(key));
+    const response = await fetch(`/api/screen?${params}`, { credentials: 'same-origin' });
     const payload = await response.json().catch(() => ({}));
     if (payload.mosque_required || (response.status === 400 && mosqueId)) {
       mosqueId = null;

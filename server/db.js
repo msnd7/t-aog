@@ -365,6 +365,8 @@ CREATE TABLE IF NOT EXISTS rewards (
   image       TEXT,
   stock       INTEGER NOT NULL DEFAULT -1,
   active      INTEGER NOT NULL DEFAULT 1,
+  purchasable INTEGER NOT NULL DEFAULT 1,
+  deleted_at  TEXT,
   created_at  TEXT NOT NULL,
   mosque_id   INTEGER REFERENCES mosques(id)
 );
@@ -518,6 +520,8 @@ CREATE TABLE IF NOT EXISTS rewards (
   image       TEXT,
   stock       INTEGER NOT NULL DEFAULT -1,
   active      INTEGER NOT NULL DEFAULT 1,
+  purchasable INTEGER NOT NULL DEFAULT 1,
+  deleted_at  TEXT,
   created_at  TEXT NOT NULL,
   mosque_id   INTEGER REFERENCES mosques(id)
 );
@@ -571,6 +575,11 @@ const DEFAULT_SETTINGS = {
   cheque_discipline: '25',
   screen_rotate_seconds: '14',
   allow_student_photo_upload: '1',
+  // المتجر: 1 الشراء مفتوح لكل الجوائز، 0 مقفل (تبقى الجوائز ظاهرة للطلاب)
+  store_open: '1',
+  // فترة شاشة العرض: week · month · since (من تاريخ screen_from) · all (كل الأيام السابقة)
+  screen_period: 'week',
+  screen_from: '',
   default_code: '1234'
 };
 
@@ -602,7 +611,8 @@ const MOSQUE_SETTING_KEYS = [
   'currency', 'scan_points', 'scan_cooldown_seconds', 'week_start_day',
   'cheque_attendance_early', 'cheque_attendance_general', 'cheque_recitation_hifz',
   'cheque_recitation_review', 'cheque_recitation_both', 'cheque_discipline',
-  'screen_rotate_seconds', 'allow_student_photo_upload', 'public_screen'
+  'screen_rotate_seconds', 'allow_student_photo_upload', 'public_screen',
+  'store_open', 'screen_period', 'screen_from'
 ];
 
 async function columnExists(table, column) {
@@ -661,6 +671,19 @@ async function migrateMosques() {
   await rawRun("INSERT INTO settings (key, value) VALUES ('mosques_migrated', '1') ON CONFLICT (key) DO NOTHING", []);
 }
 
+/**
+ * أعمدة المتجر الأحدث للقواعد القديمة: purchasable يقفل شراء الجائزة مع بقائها
+ * ظاهرة، وdeleted_at يحذف الجائزة من المتجر مع بقاء طلبات الطلاب السابقة عليها.
+ */
+async function migrateRewards() {
+  if (!(await columnExists('rewards', 'purchasable'))) {
+    await rawExec('ALTER TABLE rewards ADD COLUMN purchasable INTEGER NOT NULL DEFAULT 1');
+  }
+  if (!(await columnExists('rewards', 'deleted_at'))) {
+    await rawExec('ALTER TABLE rewards ADD COLUMN deleted_at TEXT');
+  }
+}
+
 async function initSchema() {
   if (engineKind === 'pg') {
     await rawExec(PG_SCHEMA);
@@ -672,6 +695,7 @@ async function initSchema() {
   }
   await seedDefaultSettings();
   await migrateMosques();
+  await migrateRewards();
 }
 
 /**

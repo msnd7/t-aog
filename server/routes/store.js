@@ -1,6 +1,6 @@
 'use strict';
 const express = require('express');
-const { db } = require('../db');
+const { db, getSettings, setMosqueSetting } = require('../db');
 const { requireAuth, requireStaff } = require('../auth');
 const { nowIso, toInt, asyncHandler } = require('../util');
 const { studentWallet } = require('../stats');
@@ -11,12 +11,25 @@ const router = express.Router();
 
 // ---- rewards -------------------------------------------------------------
 
+/** حالة الشراء العامة للمتجر في هذا المسجد */
+const storeOpen = async (mosqueId) => (await getSettings(mosqueId)).store_open !== '0';
+
+/** يحوّل قيمة النموذج (1/0/true/on) إلى 1 أو 0 */
+const flag = (value) => (['0', 'false', 'off', ''].includes(String(value).toLowerCase()) ? 0 : 1);
+
 router.get('/rewards', requireAuth, asyncHandler(async (req, res) => {
   const all = req.user.role !== 'student' && req.query.all === '1';
-  const rows = await db.prepare(`SELECT * FROM rewards WHERE mosque_id = ? ${all ? '' : 'AND active = 1'} ORDER BY price ASC, id DESC`)
-    .all(req.mosqueId);
+  const rows = await db.prepare(`SELECT * FROM rewards WHERE mosque_id = ? AND deleted_at IS NULL
+    ${all ? '' : 'AND active = 1'} ORDER BY price ASC, id DESC`).all(req.mosqueId);
   const wallet = req.user.role === 'student' ? await studentWallet(req.user.id) : null;
-  res.json({ rewards: rows, wallet });
+  res.json({ rewards: rows, wallet, store_open: await storeOpen(req.mosqueId) });
+}));
+
+/** فتح الشراء أو إقفاله لكل جوائز المتجر دفعة واحدة (تبقى الجوائز ظاهرة) */
+router.post('/status', requireStaff, asyncHandler(async (req, res) => {
+  const open = flag(req.body.open);
+  await setMosqueSetting(req.mosqueId, 'store_open', open ? '1' : '0');
+  res.json({ ok: true, store_open: Boolean(open) });
 }));
 
 router.post('/rewards', requireStaff, upload.single('image'), asyncHandler(async (req, res) => {
@@ -24,27 +37,41 @@ router.post('/rewards', requireStaff, upload.single('image'), asyncHandler(async
   const price = toInt(req.body.price);
   if (!name) return res.status(400).json({ error: 'اسم الجائزة مطلوب' });
   if (price <= 0) return res.status(400).json({ error: 'أدخل سعر الجائزة بالنقاط' });
+  const active = req.body.active === undefined ? 1 : flag(req.body.active);
+  const purchasable = req.body.purchasable === undefined ? 1 : flag(req.body.purchasable);
   const info = await db.prepare(`
-    INSERT INTO rewards (name, description, price, image, stock, active, created_at, mosque_id)
-    VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+    INSERT INTO rewards (name, description, price, image, stock, active, purchasable, created_at, mosque_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING id
   `).run(name, String(req.body.description || '').trim() || null, price,
-    req.file ? uploadUrl(req.file.filename) : null, toInt(req.body.stock, -1), nowIso(), req.mosqueId);
+    req.file ? uploadUrl(req.file.filename) : null, toInt(req.body.stock, -1), active, purchasable,
+    nowIso(), req.mosqueId);
   res.status(201).json({ reward: await db.prepare('SELECT * FROM rewards WHERE id = ?').get(Number(info.lastInsertRowid)) });
 }));
 
 router.patch('/rewards/:id', requireStaff, upload.single('image'), asyncHandler(async (req, res) => {
   const id = toInt(req.params.id);
-  const reward = await db.prepare('SELECT * FROM rewards WHERE id = ? AND mosque_id = ?').get(id, req.mosqueId);
+  const reward = await db.prepare('SELECT * FROM rewards WHERE id = ? AND mosque_id = ? AND deleted_at IS NULL')
+    .get(id, req.mosqueId);
   if (!reward) return res.status(404).json({ error: 'الجائزة غير موجودة' });
   const fields = [];
   const params = [];
-  if (req.body.name !== undefined) { fields.push('name = ?'); params.push(String(req.body.name).trim()); }
+  if (req.body.name !== undefined) {
+    const name = String(req.body.name).trim();
+    if (!name) return res.status(400).json({ error: 'اسم الجائزة مطلوب' });
+    fields.push('name = ?'); params.push(name);
+  }
   if (req.body.description !== undefined) { fields.push('description = ?'); params.push(String(req.body.description).trim() || null); }
-  if (req.body.price !== undefined) { fields.push('price = ?'); params.push(toInt(req.body.price)); }
+  if (req.body.price !== undefined) {
+    const price = toInt(req.body.price);
+    if (price <= 0) return res.status(400).json({ error: 'أدخل سعر الجائزة بالنقاط' });
+    fields.push('price = ?'); params.push(price);
+  }
   if (req.body.stock !== undefined) { fields.push('stock = ?'); params.push(toInt(req.body.stock, -1)); }
-  if (req.body.active !== undefined) { fields.push('active = ?'); params.push(String(req.body.active) === '0' ? 0 : 1); }
+  if (req.body.active !== undefined) { fields.push('active = ?'); params.push(flag(req.body.active)); }
+  if (req.body.purchasable !== undefined) { fields.push('purchasable = ?'); params.push(flag(req.body.purchasable)); }
   if (req.file) { fields.push('image = ?'); params.push(uploadUrl(req.file.filename)); }
+  else if (flag(req.body.remove_image || '0')) { fields.push('image = ?'); params.push(null); }
   if (!fields.length) return res.status(400).json({ error: 'لا يوجد تعديل' });
   params.push(id);
   await db.prepare(`UPDATE rewards SET ${fields.join(', ')} WHERE id = ?`).run(...params);
@@ -53,13 +80,14 @@ router.patch('/rewards/:id', requireStaff, upload.single('image'), asyncHandler(
 
 router.delete('/rewards/:id', requireStaff, asyncHandler(async (req, res) => {
   const id = toInt(req.params.id);
-  if (!(await db.prepare('SELECT 1 FROM rewards WHERE id = ? AND mosque_id = ?').get(id, req.mosqueId))) {
+  if (!(await db.prepare('SELECT 1 FROM rewards WHERE id = ? AND mosque_id = ? AND deleted_at IS NULL').get(id, req.mosqueId))) {
     return res.status(404).json({ error: 'الجائزة غير موجودة' });
   }
+  // جائزة سبق طلبها: تُحذف من المتجر وتبقى في سجل طلبات الطلاب
   const used = await db.prepare('SELECT 1 FROM redemptions WHERE reward_id = ? LIMIT 1').get(id);
   if (used) {
-    await db.prepare('UPDATE rewards SET active = 0 WHERE id = ?').run(id);
-    return res.json({ ok: true, archived: true });
+    await db.prepare('UPDATE rewards SET active = 0, purchasable = 0, deleted_at = ? WHERE id = ?').run(nowIso(), id);
+    return res.json({ ok: true, deleted: true, archived: true });
   }
   await db.prepare('DELETE FROM rewards WHERE id = ?').run(id);
   res.json({ ok: true, deleted: true });
@@ -74,8 +102,11 @@ router.post('/rewards/:id/redeem', requireAuth, asyncHandler(async (req, res) =>
   if (!studentId) return res.status(400).json({ error: 'حدد الطالب' });
   if (req.user.role === 'student' && studentId !== req.user.id) return res.status(403).json({ error: 'غير مصرح' });
 
-  const reward = await db.prepare('SELECT * FROM rewards WHERE id = ? AND active = 1 AND mosque_id = ?').get(rewardId, req.mosqueId);
+  const reward = await db.prepare('SELECT * FROM rewards WHERE id = ? AND active = 1 AND deleted_at IS NULL AND mosque_id = ?')
+    .get(rewardId, req.mosqueId);
   if (!reward) return res.status(404).json({ error: 'الجائزة غير متوفرة' });
+  if (!(await storeOpen(req.mosqueId))) return res.status(400).json({ error: 'الشراء من المتجر مقفل حالياً' });
+  if (!reward.purchasable) return res.status(400).json({ error: 'شراء هذه الجائزة لم يُفتح بعد' });
   const student = await db.prepare("SELECT id FROM users WHERE id = ? AND role = 'student' AND mosque_id = ?")
     .get(studentId, req.mosqueId);
   if (!student) return res.status(404).json({ error: 'الطالب غير موجود' });

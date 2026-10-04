@@ -10,9 +10,9 @@ function rangeClause(alias, from, to, params) {
   return sql;
 }
 
-async function currentRange(period = 'week', mosqueId = null) {
+async function currentRange(period = 'week', mosqueId = null, since = null) {
   const settings = await getSettings(mosqueId);
-  return rangeFor(period, toInt(settings.week_start_day, 0));
+  return rangeFor(period, toInt(settings.week_start_day, 0), new Date(), since);
 }
 
 /**
@@ -93,17 +93,20 @@ async function studentRank(studentId, period = 'week', mosqueId = null) {
   return { rank: index === -1 ? null : index + 1, total: board.length };
 }
 
-/** فارس الأسبوع — the student with the most points inside the current week. */
-async function knightOfWeek(mosqueId = null) {
-  const { from, to, label } = await currentRange('week', mosqueId);
+/**
+ * فارس الأسبوع — the student with the most points inside the current week.
+ * يقبل نطاقاً آخر (range) لتتبع شاشة العرض الفترة المختارة: شهر، أو من تاريخ، أو كل الأيام.
+ */
+async function knightOfWeek(mosqueId = null, range = null) {
+  const { from, to, label } = range || await currentRange('week', mosqueId);
   const [top] = await studentLeaderboard({ from, to, limit: 1, mosqueId });
   if (!top || top.points <= 0) return null;
   return { ...top, period: label, from, to };
 }
 
-/** حلقة الأسبوع — the circle with the most points inside the current week. */
-async function halaqaOfWeek(mosqueId = null) {
-  const { from, to, label } = await currentRange('week', mosqueId);
+/** حلقة الأسبوع — the circle with the most points inside the current week (أو النطاق الممرَّر). */
+async function halaqaOfWeek(mosqueId = null, range = null) {
+  const { from, to, label } = range || await currentRange('week', mosqueId);
   const [top] = await halaqaLeaderboard({ from, to, mosqueId });
   if (!top || top.points <= 0) return null;
   const members = await studentLeaderboard({ from, to, halaqaId: top.id, limit: 5, mosqueId });
