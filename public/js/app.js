@@ -19,11 +19,15 @@ import * as platformSettings from './views/platform-settings.js';
 /** mosque: المسجد الذي تعمل عليه الواجهة الآن (null لمدير المنصة في لوحة المنصة) */
 export const state = { user: null, mosque: null, settings: {}, catalog: {} };
 
+/**
+ * عناصر التنقل. dock: يظهر في الشريط السفلي للجوال، fab: الزر البارز في منتصفه،
+ * والبقية تُجمع في لوحة «المزيد».
+ */
 const STAFF_NAV = [
-  { path: '/', icon: 'home', label: 'الرئيسية', group: 'المتابعة' },
-  { path: '/scan', icon: 'scan', label: 'المسح', group: 'الرصد' },
-  { path: '/cheques', icon: 'cheque', label: 'الشيكات' },
-  { path: '/students', icon: 'students', label: 'الأفراد', group: 'الإدارة' },
+  { path: '/', icon: 'home', label: 'الرئيسية', dock: true },
+  { path: '/scan', icon: 'scan', label: 'المسح', fab: true },
+  { path: '/cheques', icon: 'cheque', label: 'الشيكات', dock: true },
+  { path: '/students', icon: 'students', label: 'الأفراد', dock: true },
   { path: '/halaqat', icon: 'groups', label: 'المجموعات' },
   { path: '/store', icon: 'gift', label: 'المتجر' },
   { path: '/leaderboard', icon: 'trophy', label: 'الصدارة' },
@@ -32,15 +36,15 @@ const STAFF_NAV = [
 
 /** لوحة مدير المنصة قبل دخول أي مسجد */
 const PLATFORM_NAV = [
-  { path: '/', icon: 'home', label: 'لوحة المنصة', group: 'المنصة' },
-  { path: '/accounts', icon: 'settings', label: 'الحسابات والإعدادات' }
+  { path: '/', icon: 'home', label: 'لوحة المنصة', dock: true },
+  { path: '/accounts', icon: 'settings', label: 'الحسابات والإعدادات', dock: true }
 ];
 
 const STUDENT_NAV = [
-  { path: '/', icon: 'home', label: 'صفحتي' },
-  { path: '/leaderboard', icon: 'trophy', label: 'الصدارة' },
-  { path: '/store', icon: 'gift', label: 'المتجر' },
-  { path: '/orders', icon: 'box', label: 'طلباتي' }
+  { path: '/', icon: 'home', label: 'صفحتي', dock: true },
+  { path: '/leaderboard', icon: 'trophy', label: 'الصدارة', dock: true },
+  { path: '/store', icon: 'gift', label: 'المتجر', dock: true },
+  { path: '/orders', icon: 'box', label: 'طلباتي', dock: true }
 ];
 
 const ROUTES = [
@@ -68,16 +72,54 @@ export const isAdmin = () => !!state.user && state.user.role === 'admin';
 export const isPlatform = () => isAdmin() && !state.mosque;
 export const screenUrl = () => (state.mosque ? `/screen.html?mosque=${state.mosque.id}` : '/screen.html');
 
+/**
+ * الانتقال إلى الشاشة الرئيسية برسم واحد: يُضبط الرابط على #/ دون إطلاق hashchange
+ * حتى لا تُرسم الصفحة مرتين متزامنتين فتبقى إحداهما فارغة.
+ */
+function goHome() {
+  if (window.location.hash !== '#/') history.replaceState(null, '', '#/');
+  renderApp();
+}
+
+/** آخر مسجد دخله مدير المنصة على هذا الجهاز، ليعود إلى لوحته مباشرة بعد الدخول */
+const LAST_MOSQUE_KEY = 'rq_last_mosque';
+function rememberMosque(id) {
+  try { if (id) localStorage.setItem(LAST_MOSQUE_KEY, String(id)); } catch { /* التخزين غير متاح */ }
+}
+
 /** دخول مدير المنصة إلى واجهة مسجد، أو العودة إلى لوحة المنصة بتمرير null */
 export async function enterMosque(id) {
   try {
     const data = await api.post('/api/mosques/enter', { id: id || 0 });
     state.mosque = data.mosque;
+    if (data.mosque) rememberMosque(data.mosque.id);
     await loadSettings();
-    window.location.hash = '#/';
-    renderApp();
+    goHome();
     if (data.mosque) ok(`أنت الآن في واجهة ${data.mosque.name}`);
   } catch (error) { fail(error.message); }
+}
+
+/**
+ * بعد تسجيل الدخول (أو تغيير الرمز المؤقت): تُفتح لوحة التحكم مباشرة. المشرف والطالب
+ * في مسجدهما أصلاً، ومدير المنصة يدخل لوحة آخر مسجد عمل عليه، وإلا أول مسجد مفعَّل،
+ * ولوحة المنصة تبقى على بُعد نقرة من زر «المنصة».
+ */
+async function landAfterLogin() {
+  if (isAdmin() && !state.mosque) {
+    try {
+      const { mosques = [] } = await api.get('/api/mosques/public');
+      let target = null;
+      try { target = Number(localStorage.getItem(LAST_MOSQUE_KEY)) || null; } catch { /* لا شيء */ }
+      if (!mosques.some((m) => m.id === target)) target = mosques.length ? mosques[0].id : null;
+      if (target) {
+        const data = await api.post('/api/mosques/enter', { id: target });
+        state.mosque = data.mosque;
+        rememberMosque(target);
+        await loadSettings();
+      }
+    } catch { /* يبقى في لوحة المنصة */ }
+  }
+  goHome();
 }
 export const navigate = (path) => { window.location.hash = `#${path}`; };
 
@@ -169,9 +211,9 @@ function loginScreen() {
       lastUsedCode = codeInput.value.trim();
       await loadMe();
       await loadSettings();
-      window.location.hash = '#/';
-      if (!data.user.must_change_code) ok(`أهلاً ${data.user.name}`);
-      renderApp();
+      if (state.user && state.user.must_change_code) return goHome();
+      ok(`أهلاً ${data.user.name}`);
+      await landAfterLogin();
     } catch (error) {
       fail(error.message);
       codeInput.value = '';
@@ -230,8 +272,8 @@ function changeCodeScreen() {
       state.user = data.user;
       lastUsedCode = null;
       ok('تم حفظ رمزك الجديد');
-      window.location.hash = '#/';
-      renderApp();
+      await loadMe();
+      await landAfterLogin();
     } catch (error) {
       fail(error.message);
       button.disabled = false;
@@ -253,97 +295,163 @@ function navItems() {
   return items.filter((item) => !item.adminOnly || isAdmin());
 }
 
-function navMarkup(path, className) {
-  const isSidebar = className === 'nav';
-  const links = navItems().map((item) => `
-    ${isSidebar && item.group ? `<span class="nav__label">${esc(item.group)}</span>` : ''}
+/** روابط التنقل الأفقية في الشريط العلوي (الحاسب والآيباد العريض) */
+function topNavMarkup(path) {
+  return navItems().map((item) => `
     <a class="${item.path === path ? 'active' : ''}" href="#${item.path}">
-      ${icon(item.icon)}<span>${esc(item.label)}</span>
+      ${icon(item.icon, { size: 18 })}<span>${esc(item.label)}</span>
     </a>`).join('');
-  return links + (isSidebar && state.mosque
-    ? `<span class="nav__label">أدوات</span>
-       <a href="${screenUrl()}" target="_blank" rel="noopener">${icon('screen')}<span>شاشة العرض</span></a>` : '');
 }
 
-/** بطاقة المسجد الحالي أعلى القائمة الجانبية، ولمدير المنصة زر العودة للوحة المنصة */
-function mosqueBadge() {
-  if (isPlatform()) {
-    return `<div class="mosque-badge mosque-badge--platform">${icon('home', { size: 18 })}
-      <div><span>الواجهة الحالية</span><strong>لوحة المنصة — كل المساجد</strong></div></div>`;
+/** الشريط السفلي العائم للجوال: أهم الشاشات وزر المسح البارز وزر «المزيد» */
+function dockMarkup(path) {
+  const items = navItems();
+  const link = (item) => `
+    <a class="${item.path === path ? 'active' : ''}" href="#${item.path}">
+      ${icon(item.icon, { size: 22 })}<span>${esc(item.label)}</span>
+    </a>`;
+  const docked = items.filter((item) => item.dock);
+  const fab = items.find((item) => item.fab);
+  const rest = items.filter((item) => !item.dock && !item.fab);
+  const cells = docked.map(link);
+  if (fab) {
+    cells.splice(Math.min(1, cells.length), 0, `
+      <a class="dock__fab ${fab.path === path ? 'active' : ''}" href="#${fab.path}" aria-label="${esc(fab.label)}">
+        <i>${icon(fab.icon, { size: 26, stroke: 2 })}</i><span>${esc(fab.label)}</span>
+      </a>`);
   }
-  if (!state.mosque) return '';
-  return `
-    <div class="mosque-badge">
-      ${icon('mosque', { size: 18 })}
-      <div><span>${isAdmin() ? 'تتصفح واجهة' : 'المسجد'}</span><strong>${esc(state.mosque.name)}</strong></div>
-      ${isAdmin() ? `<button class="btn btn--sm btn--ghost" type="button" data-leave-mosque>${icon('back', { size: 16 })} المنصة</button>` : ''}
+  if (rest.length || state.mosque) {
+    const inMore = rest.some((item) => item.path === path);
+    cells.push(`<button type="button" class="${inMore ? 'active' : ''}" data-open-sheet>
+      ${icon('more', { size: 22 })}<span>المزيد</span></button>`);
+  }
+  return cells.join('');
+}
+
+/** لوحة «المزيد» على الجوال: بقية الشاشات والأدوات وحساب المستخدم */
+function openMoreSheet(path) {
+  const rest = navItems().filter((item) => !item.dock && !item.fab);
+  const tile = ({ href = '', label, name, attrs = '', active = false, danger = false, target = '' }) => {
+    const inner = `<i>${icon(name, { size: 22 })}</i><span>${esc(label)}</span>`;
+    const cls = `${active ? 'active' : ''} ${danger ? 'danger' : ''}`;
+    return href
+      ? `<a class="${cls}" href="${esc(href)}" ${target ? `target="${target}" rel="noopener"` : ''} ${attrs}>${inner}</a>`
+      : `<button type="button" class="${cls}" ${attrs}>${inner}</button>`;
+  };
+  const host = document.getElementById('modal-host');
+  const backdrop = document.createElement('div');
+  backdrop.className = 'sheet-backdrop';
+  backdrop.innerHTML = `
+    <div class="sheet" role="dialog" aria-modal="true" aria-label="المزيد">
+      <div class="sheet__grip"></div>
+      <div class="sheet__user">
+        <span class="userbtn__avatar">${esc((state.user.name || '?')[0])}</span>
+        <div><strong>${esc(state.user.name)}</strong>
+          <span>${roleLabel(state.user.role)}${state.mosque ? ` · ${esc(state.mosque.name)}` : ''}</span></div>
+      </div>
+      ${rest.length ? `
+        <div class="sheet__title">الشاشات</div>
+        <div class="sheet__grid">
+          ${rest.map((item) => tile({ href: `#${item.path}`, label: item.label, name: item.icon, active: item.path === path })).join('')}
+        </div>` : ''}
+      <div class="sheet__title">أدوات</div>
+      <div class="sheet__grid">
+        ${state.mosque ? tile({ href: screenUrl(), label: 'شاشة العرض', name: 'screen', target: '_blank' }) : ''}
+        ${state.mosque && isStaff() ? tile({ label: 'فترة الشاشة', name: 'calendar', attrs: 'data-sheet-screen' }) : ''}
+        ${tile({ label: 'تغيير الرمز', name: 'key', attrs: 'data-sheet-code' })}
+        ${isAdmin() && state.mosque ? tile({ label: 'لوحة المنصة', name: 'home', attrs: 'data-sheet-platform' }) : ''}
+        ${tile({ label: 'تسجيل الخروج', name: 'logout', danger: true, attrs: 'data-sheet-logout' })}
+      </div>
     </div>`;
+  const close = () => backdrop.remove();
+  backdrop.addEventListener('click', (event) => {
+    if (event.target === backdrop || event.target.closest('a')) close();
+  });
+  const on = (selector, fn) => {
+    const el = backdrop.querySelector(selector);
+    if (el) el.addEventListener('click', () => { close(); fn(); });
+  };
+  on('[data-sheet-code]', () => settingsView.changeMyCodeModal());
+  on('[data-sheet-screen]', () => settingsView.screenSettingsModal());
+  on('[data-sheet-platform]', () => enterMosque(null));
+  on('[data-sheet-logout]', () => logout());
+  host.appendChild(backdrop);
+}
+
+async function logout() {
+  await api.logout();
+  state.user = null;
+  state.mosque = null;
+  window.location.hash = '';
+  await loadSettings();
+  renderApp();
 }
 
 function layout(path) {
   const root = document.getElementById('root');
+  const academy = state.settings.academy_name || 'رياض القرآن';
+  const where = isPlatform() ? 'لوحة المنصة — كل المساجد' : state.mosque ? state.mosque.name : 'منصة التحفيز';
   root.innerHTML = `
-    <div class="layout">
-      <aside class="sidebar">
-        <div class="sidebar__brand">
-          <img src="${esc(state.settings.logo || '/img/logo.jpg')}" alt="الشعار">
-          <div>
-            <strong>${esc(state.settings.academy_name || 'رياض القرآن')}</strong>
-            <span>منصة التحفيز</span>
-          </div>
-        </div>
-        ${mosqueBadge()}
-        <nav class="nav">${navMarkup(path, 'nav')}</nav>
-        <div class="sidebar__foot">
-          <div class="sidebar__user">
-            <span class="avatar">${esc((state.user.name || '?')[0])}</span>
+    <div class="shell">
+      <header class="appbar">
+        <div class="appbar__row">
+          <a class="brand" href="#/">
+            <img src="${esc(state.settings.logo || '/img/logo.jpg')}" alt="الشعار">
             <div>
-              <strong>${esc(state.user.name)}</strong><br>
-              <span style="opacity:.75">${roleLabel(state.user.role)}</span>
+              <strong>${esc(academy)}</strong>
+              <span>${icon(isPlatform() ? 'home' : 'mosque', { size: 12 })}${esc(where)}</span>
             </div>
-          </div>
-          <button class="btn btn--ghost btn--sm btn--block" id="logout">${icon('logout', { size: 16 })} تسجيل الخروج</button>
-        </div>
-      </aside>
-      <main class="main">
-        <header class="topbar">
-          <div class="topbar__title">
-            ${state.mosque && isAdmin() ? `<button class="mosque-chip" type="button" data-leave-mosque>${icon('mosque', { size: 14 })} ${esc(state.mosque.name)} · العودة للمنصة</button>` : ''}
-            <h1 id="page-title">…</h1><p id="page-subtitle"></p>
-          </div>
-          <div class="topbar__actions">
-            <span id="page-actions" class="row" style="gap:.45rem"></span>
+          </a>
+          <div class="appbar__tools">
+            ${state.mosque && isAdmin() ? `<button class="mosque-chip" type="button" data-leave-mosque title="العودة للوحة المنصة">${icon('back', { size: 14 })}<span>المنصة</span></button>` : ''}
+            ${state.mosque ? `<a class="appbar__icon appbar__screen" href="${screenUrl()}" target="_blank" rel="noopener" title="شاشة العرض">${icon('screen', { size: 19 })}</a>` : ''}
             ${menu({
-    name: 'user',
+    name: '',
     label: '',
-    className: 'btn btn--sm btn--ghost',
+    caret: false,
+    className: 'userbtn',
     items: [
-      menuItem({ label: esc(state.user.name), name: 'user', attrs: 'disabled style="opacity:.7"' }),
+      menuItem({ label: `${state.user.name} · ${roleLabel(state.user.role)}`, name: 'user', attrs: 'disabled style="opacity:.75"' }),
       menuSep(),
       menuItem({ label: 'تغيير رمز الدخول', name: 'key', attrs: 'data-menu-code' }),
       ...(state.mosque ? [menuItem({ label: 'شاشة العرض', name: 'screen', href: screenUrl(), target: '_blank' })] : []),
+      ...(state.mosque && isStaff() ? [menuItem({ label: 'فترة شاشة العرض', name: 'calendar', attrs: 'data-menu-screen' })] : []),
       ...(isAdmin() && state.mosque ? [menuItem({ label: 'العودة للوحة المنصة', name: 'home', attrs: 'data-leave-mosque' })] : []),
       menuSep(),
       menuItem({ label: 'تسجيل الخروج', name: 'logout', danger: true, attrs: 'data-menu-logout' })
     ]
   })}
           </div>
-        </header>
-        <div class="content" id="content">${spinner()}</div>
-      </main>
-      <nav class="mobile-nav">${navMarkup(path, 'mobile')}</nav>
+        </div>
+      </header>
+      <div class="navbar"><nav class="topnav" aria-label="التنقل الرئيسي">${topNavMarkup(path)}</nav></div>
+      <section class="pagehead">
+        <div class="pagehead__inner">
+          <div>
+            <span class="pagehead__eyebrow">${icon(isPlatform() ? 'home' : 'mosque', { size: 14 })} ${esc(where)}</span>
+            <h1 id="page-title">…</h1><p id="page-subtitle"></p>
+          </div>
+          <div class="pagehead__actions" id="page-actions"></div>
+        </div>
+      </section>
+      <main class="content" id="content">${spinner()}</main>
+      <nav class="dock" aria-label="التنقل السريع">${dockMarkup(path)}</nav>
     </div>`;
-  const logout = async () => {
-    await api.logout();
-    state.user = null;
-    state.mosque = null;
-    window.location.hash = '';
-    await loadSettings();
-    renderApp();
-  };
-  root.querySelector('#logout').addEventListener('click', logout);
+
+  // زر المستخدم: الحرف الأول من الاسم مع الاسم والصلاحية
+  const userButton = root.querySelector('.userbtn');
+  userButton.innerHTML = `
+    <span class="userbtn__avatar">${esc((state.user.name || '?')[0])}</span>
+    <span class="userbtn__meta">${esc(state.user.name)}<small>${roleLabel(state.user.role)}</small></span>
+    ${icon('chevron', { size: 14 })}`;
+  userButton.setAttribute('aria-label', 'حسابي');
+
   root.querySelector('[data-menu-logout]').addEventListener('click', logout);
   root.querySelector('[data-menu-code]').addEventListener('click', () => settingsView.changeMyCodeModal());
+  const screenItem = root.querySelector('[data-menu-screen]');
+  if (screenItem) screenItem.addEventListener('click', () => settingsView.screenSettingsModal());
+  const sheetButton = root.querySelector('[data-open-sheet]');
+  if (sheetButton) sheetButton.addEventListener('click', () => openMoreSheet(path));
   root.querySelectorAll('[data-leave-mosque]').forEach((button) => {
     button.addEventListener('click', () => enterMosque(null));
   });
@@ -396,8 +504,7 @@ async function renderRoute() {
     // انتهى اختيار المسجد (أو عُطِّل): العودة إلى لوحة المنصة
     if (error.payload && error.payload.mosque_required && isAdmin() && state.mosque) {
       state.mosque = null;
-      window.location.hash = '#/';
-      return renderApp();
+      return goHome();
     }
     content.innerHTML = `<div class="card"><div class="empty">${icon('warning', { size: 40, stroke: 1.3 })}${esc(error.message)}</div></div>`;
   }

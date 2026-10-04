@@ -47,7 +47,9 @@ export async function render({ state }) {
               <div class="field"><label>مهلة منع تكرار المسح (ثانية)</label><input name="scan_cooldown_seconds" type="number" value="${esc(s.scan_cooldown_seconds || 20)}"></div>
             </div>
             <div class="inline-fields">
-              <div class="field"><label>مدة عرض كل شاشة (ثانية)</label><input name="screen_rotate_seconds" type="number" value="${esc(s.screen_rotate_seconds || 14)}"></div>
+              <div class="field"><label>فترة شاشة العرض</label>
+                <button class="btn btn--ghost" type="button" data-screen-period>${icon('calendar', { size: 18 })} ${esc(screenPeriodLabel(s))}</button>
+              </div>
               <div class="field"><label>شاشة العرض بدون تسجيل دخول</label>
                 <select name="public_screen">
                   <option value="1" ${s.public_screen !== '0' ? 'selected' : ''}>متاحة للجميع</option>
@@ -176,6 +178,12 @@ export function mount({ content, refresh }) {
   });
 
   document.querySelector('[data-my-code]').onclick = () => changeMyCodeModal();
+  content.querySelector('[data-screen-period]').onclick = () => screenSettingsModal(refresh);
+}
+
+function screenPeriodLabel(s) {
+  if (s.screen_period === 'since' && s.screen_from) return `من ${s.screen_from}`;
+  return { month: 'هذا الشهر', all: 'كل الأيام السابقة', day: 'اليوم' }[s.screen_period] || 'هذا الأسبوع';
 }
 
 function staffModal(onDone) {
@@ -226,6 +234,74 @@ export function changeMyCodeModal(onDone) {
         try {
           await api.post('/api/auth/code', formValues(event.target));
           ok('تم تغيير رمز الدخول');
+          close();
+          if (onDone) onDone();
+        } catch (error) { fail(error.message); }
+      };
+    }
+  });
+}
+
+/** فترات شاشة العرض المتاحة للاختيار */
+const SCREEN_PERIODS = [
+  { value: 'week', label: 'هذا الأسبوع', hint: 'فارس الأسبوع وحلقة الأسبوع' },
+  { value: 'month', label: 'هذا الشهر', hint: 'فارس الشهر وحلقة الشهر' },
+  { value: 'since', label: 'من تاريخ معيّن', hint: 'من التاريخ المختار حتى اليوم' },
+  { value: 'all', label: 'كل الأيام السابقة', hint: 'الترتيب العام منذ البداية' }
+];
+
+/** تاريخ اليوم بصيغة YYYY-MM-DD بالتوقيت المحلي لحقل التاريخ */
+const todayIso = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+};
+
+/**
+ * ضبط فترة شاشة العرض للمسجد الحالي: أسبوع، شهر، من تاريخ معيّن، أو كل الأيام السابقة.
+ * متاح للمشرف ومدير المنصة داخل المسجد، ويُطبَّق فوراً على الشاشات المفتوحة عند تحديثها.
+ */
+export async function screenSettingsModal(onDone) {
+  let current;
+  try { current = await api.get('/api/screen/settings'); }
+  catch (error) { fail(error.message); return; }
+  modal({
+    title: 'فترة شاشة العرض',
+    render: () => `
+      <form id="screen-form">
+        <p class="muted small" style="margin-top:0">اختر الفترة التي تُحسب عليها نقاط فارس الشاشة والحلقة المتصدرة ولوحة الصدارة.</p>
+        <div class="period-options">
+          ${SCREEN_PERIODS.map((p) => `
+            <label class="period-option">
+              <input type="radio" name="screen_period" value="${p.value}" ${current.screen_period === p.value ? 'checked' : ''}>
+              <div><strong>${esc(p.label)}</strong><span>${esc(p.hint)}</span></div>
+            </label>`).join('')}
+        </div>
+        <div class="field" data-since-field>
+          <label>${icon('calendar', { size: 16 })} تاريخ بداية العرض</label>
+          <input type="date" name="screen_from" max="${todayIso()}" value="${esc(current.screen_from || '')}">
+          <span class="hint">تُجمع النقاط من بداية هذا اليوم حتى الآن.</span>
+        </div>
+        <div class="field">
+          <label>مدة عرض كل شريحة (ثانية)</label>
+          <input type="number" name="screen_rotate_seconds" min="5" max="300" value="${esc(current.screen_rotate_seconds || 14)}">
+        </div>
+        <button class="btn btn--block" type="submit">${icon('save', { size: 18 })} حفظ وتطبيق على الشاشة</button>
+      </form>`,
+    onMount: (root, close) => {
+      const form = root.querySelector('#screen-form');
+      const sinceField = root.querySelector('[data-since-field]');
+      const sync = () => {
+        const isSince = form.screen_period.value === 'since';
+        sinceField.hidden = !isSince;
+        form.screen_from.required = isSince;
+      };
+      form.querySelectorAll('[name=screen_period]').forEach((input) => input.addEventListener('change', sync));
+      sync();
+      form.onsubmit = async (event) => {
+        event.preventDefault();
+        try {
+          const result = await api.patch('/api/screen/settings', formValues(form));
+          ok(`شاشة العرض الآن: ${result.period_label}`);
           close();
           if (onDone) onDone();
         } catch (error) { fail(error.message); }

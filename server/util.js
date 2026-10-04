@@ -31,11 +31,24 @@ function monthBounds(date = new Date()) {
   return { start, end };
 }
 
+/** يحوّل تاريخاً بصيغة YYYY-MM-DD إلى بداية ذلك اليوم بالتوقيت المحلي، أو null إن لم يكن صالحاً */
+function parseDay(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || '').trim());
+  if (!match) return null;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  if (Number.isNaN(date.getTime()) || date.getMonth() !== Number(match[2]) - 1) return null;
+  return date;
+}
+
+const dayLabel = (date) => new Intl.DateTimeFormat('ar-SA-u-ca-gregory-nu-latn',
+  { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
+
 /**
  * Range filter used by the leaderboards and the weekly awards.
  * Returns ISO bounds (or nulls for the all-time range).
+ * الفترة since تبدأ من التاريخ `since` (YYYY-MM-DD) حتى الآن، وإن لم يكن صالحاً تُعامل كـ all.
  */
-function rangeFor(period, startDay = 0, ref = new Date()) {
+function rangeFor(period, startDay = 0, ref = new Date(), since = null) {
   if (period === 'day') {
     const start = startOfDay(ref);
     const end = new Date(start);
@@ -45,6 +58,11 @@ function rangeFor(period, startDay = 0, ref = new Date()) {
   if (period === 'month') {
     const { start, end } = monthBounds(ref);
     return { from: start.toISOString(), to: end.toISOString(), label: 'هذا الشهر' };
+  }
+  if (period === 'since') {
+    const start = parseDay(since);
+    if (start) return { from: start.toISOString(), to: null, label: `منذ ${dayLabel(start)}` };
+    return { from: null, to: null, label: 'منذ البداية' };
   }
   if (period === 'all') return { from: null, to: null, label: 'منذ البداية' };
   const { start, end } = weekBounds(ref, startDay);
@@ -154,7 +172,7 @@ const toInt = (value, fallback = 0) => {
 const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
 module.exports = {
-  nowIso, startOfDay, weekBounds, monthBounds, rangeFor, randomToken, makeBarcode,
+  nowIso, startOfDay, weekBounds, monthBounds, rangeFor, parseDay, randomToken, makeBarcode,
   chequeSerial, tafqit, toInt, normalizePhone, formatPhone, asyncHandler,
   VOUCHER_PREFIX, voucherCode, isVoucherCode, batchId
 };
