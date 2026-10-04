@@ -1,5 +1,5 @@
 /* عامل الخدمة: يتيح تثبيت المنصة كتطبيق وتشغيل الواجهة دون اتصال */
-const CACHE = 'riyad-shell-v5';
+const CACHE = 'riyad-shell-v6';
 const SHELL = [
   '/', '/index.html', '/screen.html', '/print.html', '/cards.html', '/blank.html', '/offline.html',
   '/css/app.css', '/css/screen.css', '/css/print.css', '/css/cards.css', '/css/fonts.css',
@@ -17,7 +17,7 @@ const SHELL = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting()));
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL.map((url) => new Request(url, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (event) => {
@@ -51,15 +51,15 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // هيكل التطبيق: الكاش أولاً مع تحديث في الخلفية
-  event.respondWith(caches.match(request).then((cached) => {
-    const network = fetch(request).then((response) => {
-      if (response.ok) {
-        const copy = response.clone();
-        caches.open(CACHE).then((cache) => cache.put(request, copy));
-      }
-      return response;
-    }).catch(() => cached || caches.match('/offline.html'));
-    return cached || network;
-  }));
+  // هيكل التطبيق: الشبكة أولاً (حتى لا تختلط ملفات نسخة قديمة بجديدة بعد كل نشر)،
+  // والكاش احتياطي عند انقطاع الاتصال
+  event.respondWith(fetch(request, { cache: 'no-cache' }).then((response) => {
+    if (response.ok) {
+      const copy = response.clone();
+      caches.open(CACHE).then((cache) => cache.put(request, copy));
+    }
+    return response;
+  }).catch(() => caches.match(request)
+    .then((cached) => cached || (request.mode === 'navigate' ? caches.match('/offline.html') : undefined))
+    .then((cached) => cached || Response.error())));
 });

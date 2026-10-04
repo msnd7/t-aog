@@ -72,16 +72,54 @@ export const isAdmin = () => !!state.user && state.user.role === 'admin';
 export const isPlatform = () => isAdmin() && !state.mosque;
 export const screenUrl = () => (state.mosque ? `/screen.html?mosque=${state.mosque.id}` : '/screen.html');
 
+/**
+ * الانتقال إلى الشاشة الرئيسية برسم واحد: يُضبط الرابط على #/ دون إطلاق hashchange
+ * حتى لا تُرسم الصفحة مرتين متزامنتين فتبقى إحداهما فارغة.
+ */
+function goHome() {
+  if (window.location.hash !== '#/') history.replaceState(null, '', '#/');
+  renderApp();
+}
+
+/** آخر مسجد دخله مدير المنصة على هذا الجهاز، ليعود إلى لوحته مباشرة بعد الدخول */
+const LAST_MOSQUE_KEY = 'rq_last_mosque';
+function rememberMosque(id) {
+  try { if (id) localStorage.setItem(LAST_MOSQUE_KEY, String(id)); } catch { /* التخزين غير متاح */ }
+}
+
 /** دخول مدير المنصة إلى واجهة مسجد، أو العودة إلى لوحة المنصة بتمرير null */
 export async function enterMosque(id) {
   try {
     const data = await api.post('/api/mosques/enter', { id: id || 0 });
     state.mosque = data.mosque;
+    if (data.mosque) rememberMosque(data.mosque.id);
     await loadSettings();
-    window.location.hash = '#/';
-    renderApp();
+    goHome();
     if (data.mosque) ok(`أنت الآن في واجهة ${data.mosque.name}`);
   } catch (error) { fail(error.message); }
+}
+
+/**
+ * بعد تسجيل الدخول (أو تغيير الرمز المؤقت): تُفتح لوحة التحكم مباشرة. المشرف والطالب
+ * في مسجدهما أصلاً، ومدير المنصة يدخل لوحة آخر مسجد عمل عليه، وإلا أول مسجد مفعَّل،
+ * ولوحة المنصة تبقى على بُعد نقرة من زر «المنصة».
+ */
+async function landAfterLogin() {
+  if (isAdmin() && !state.mosque) {
+    try {
+      const { mosques = [] } = await api.get('/api/mosques/public');
+      let target = null;
+      try { target = Number(localStorage.getItem(LAST_MOSQUE_KEY)) || null; } catch { /* لا شيء */ }
+      if (!mosques.some((m) => m.id === target)) target = mosques.length ? mosques[0].id : null;
+      if (target) {
+        const data = await api.post('/api/mosques/enter', { id: target });
+        state.mosque = data.mosque;
+        rememberMosque(target);
+        await loadSettings();
+      }
+    } catch { /* يبقى في لوحة المنصة */ }
+  }
+  goHome();
 }
 export const navigate = (path) => { window.location.hash = `#${path}`; };
 
@@ -173,9 +211,9 @@ function loginScreen() {
       lastUsedCode = codeInput.value.trim();
       await loadMe();
       await loadSettings();
-      window.location.hash = '#/';
-      if (!data.user.must_change_code) ok(`أهلاً ${data.user.name}`);
-      renderApp();
+      if (state.user && state.user.must_change_code) return goHome();
+      ok(`أهلاً ${data.user.name}`);
+      await landAfterLogin();
     } catch (error) {
       fail(error.message);
       codeInput.value = '';
@@ -234,8 +272,8 @@ function changeCodeScreen() {
       state.user = data.user;
       lastUsedCode = null;
       ok('تم حفظ رمزك الجديد');
-      window.location.hash = '#/';
-      renderApp();
+      await loadMe();
+      await landAfterLogin();
     } catch (error) {
       fail(error.message);
       button.disabled = false;
@@ -466,8 +504,7 @@ async function renderRoute() {
     // انتهى اختيار المسجد (أو عُطِّل): العودة إلى لوحة المنصة
     if (error.payload && error.payload.mosque_required && isAdmin() && state.mosque) {
       state.mosque = null;
-      window.location.hash = '#/';
-      return renderApp();
+      return goHome();
     }
     content.innerHTML = `<div class="card"><div class="empty">${icon('warning', { size: 40, stroke: 1.3 })}${esc(error.message)}</div></div>`;
   }

@@ -63,7 +63,7 @@ router.post('/login', asyncHandler(async (req, res) => {
   recordAttempt(key, true);
   const { token, expires } = await createSession(user.id);
   setSessionCookie(res, token, expires);
-  // مدير المنصة يبدأ دائماً من لوحة المنصة
+  // يُمسح اختيار المسجد هنا، ثم تُدخل الواجهة المديرَ لوحة آخر مسجد عمل عليه (landAfterLogin)
   if (user.role === 'admin') setMosqueCookie(res, null);
   res.json({ user: publicUser(user) });
 }));
