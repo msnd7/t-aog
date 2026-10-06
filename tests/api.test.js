@@ -322,6 +322,12 @@ test('شاشة العرض: اختيار الفترة أسبوعاً أو شهر�
   assert.ok(screen.body.range.from.startsWith('2019-12-31') || screen.body.range.from.startsWith('2020-01-01'));
   assert.equal(screen.body.range.to, null);
   assert.equal(screen.body.knight.id, studentId);
+  // فارس الأسبوع يظهر مع نقاط الفترة منذ بدايتها
+  assert.equal(screen.body.week.label, 'هذا الأسبوع');
+  assert.equal(screen.body.week.knight.id, studentId);
+  assert.equal(screen.body.week.knight.period_points, screen.body.knight.points);
+  assert.equal(screen.body.week.knight.period_rank, 1);
+  assert.equal(screen.body.week.halaqa.id, halaqaId);
 
   await call('PATCH', '/api/screen/settings', { screen_period: 'all' });
   screen = await call('GET', '/api/screen');
@@ -329,6 +335,7 @@ test('شاشة العرض: اختيار الفترة أسبوعاً أو شهر�
   // الرابط يتجاوز الإعداد المحفوظ
   screen = await call('GET', '/api/screen?period=week');
   assert.equal(screen.body.titles.knight, 'فارس الأسبوع');
+  assert.equal(screen.body.week, null);
   await call('PATCH', '/api/screen/settings', { screen_period: 'week' });
 });
 

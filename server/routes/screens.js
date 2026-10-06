@@ -23,6 +23,8 @@ const AWARD_TITLES = {
  * Everything the hall display needs in one payload:
  * فارس الأسبوع، حلقة الأسبوع، وشاشة الصدارة.
  * الفترة من الرابط (?period=&from=) إن وُجدت، وإلا من إعدادات شاشة المسجد.
+ * إن كانت الفترة غير الأسبوع يُرسل فارس الأسبوع وحلقته أيضاً (week) لتعرضهما الشاشة
+ * مع نقاط الفترة منذ بدايتها، ويحمل فارس الأسبوع مجموع نقاطه في الفترة (period_points).
  */
 router.get('/', asyncHandler(async (req, res) => {
   const mosqueId = req.mosqueId;
@@ -36,12 +38,23 @@ router.get('/', asyncHandler(async (req, res) => {
   if (period === 'since' && !parseDay(since)) period = 'all';
   const range = await currentRange(period, mosqueId, since);
   const { from, to, label } = range;
-  const [knight, halaqaWeek, students, halaqat] = await Promise.all([
+  const weekRange = period === 'week' ? null : await currentRange('week', mosqueId);
+  const [knight, halaqaWeek, board, halaqat, weekKnight, weekHalaqa] = await Promise.all([
     knightOfWeek(mosqueId, range),
     halaqaOfWeek(mosqueId, range),
-    studentLeaderboard({ from, to, limit: 20, mosqueId }),
-    halaqaLeaderboard({ from, to, mosqueId })
+    studentLeaderboard({ from, to, mosqueId }),
+    halaqaLeaderboard({ from, to, mosqueId }),
+    weekRange ? knightOfWeek(mosqueId, weekRange) : null,
+    weekRange ? halaqaOfWeek(mosqueId, weekRange) : null
   ]);
+  const students = board.slice(0, 20);
+  const periodRow = weekKnight && board.find((row) => row.id === weekKnight.id);
+  const week = weekRange ? {
+    label: weekRange.label,
+    range: { from: weekRange.from, to: weekRange.to },
+    knight: weekKnight && { ...weekKnight, period_points: periodRow ? periodRow.points : 0, period_rank: periodRow ? periodRow.rank : null },
+    halaqa: weekHalaqa
+  } : null;
   res.json({
     mosque: { id: req.mosque.id, name: req.mosque.name },
     academy: {
@@ -58,6 +71,7 @@ router.get('/', asyncHandler(async (req, res) => {
     range: { from, to },
     knight,
     halaqa_of_week: halaqaWeek,
+    week,
     students,
     halaqat,
     updated_at: new Date().toISOString()
