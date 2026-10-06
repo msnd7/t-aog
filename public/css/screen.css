@@ -89,6 +89,13 @@ html, body {
   padding: 1.1vh 2.6vw; border-radius: 999px; font-size: clamp(1.1rem, 3.2vh, 2.4rem); font-weight: 800;
   box-shadow: 0 1.6vh 3.4vh -1.6vh rgba(240, 149, 31, .9);
 }
+/* نقاط فارس الأسبوع منذ بداية فترة الشاشة */
+.knight__total {
+  display: flex; align-items: center; gap: .7vw; margin-top: 1.8vh; width: fit-content;
+  background: rgba(127, 191, 174, .16); border: 1px solid rgba(127, 191, 174, .4); color: #e3f2ee;
+  padding: .9vh 1.8vw; border-radius: 999px; font-size: clamp(.9rem, 2.4vh, 1.7rem); font-weight: 600;
+}
+.knight__total b { font-weight: 800; color: #fff; }
 .runners { display: flex; gap: 1.2vw; margin-top: 2.6vh; flex-wrap: wrap; }
 .runner {
   display: flex; align-items: center; gap: .8vw; background: rgba(255, 255, 255, .08);

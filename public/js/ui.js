@@ -70,6 +70,9 @@ export const menuSep = () => '<span class="menu__sep"></span>';
 /**
  * قائمة منسدلة: زر يفتح لوحة بالإجراءات. تُغلق تلقائياً عند اختيار إجراء
  * أو عند النقر خارجها (يُدار بمستمع واحد على مستوى الصفحة).
+ * عند الفتح تُنقل اللوحة إلى body وتُثبَّت بجانب الزر، حتى لا تقصّها بطاقة
+ * أو جدول بخاصية overflow (مثل بطاقات الجوائز في المتجر)، وتنقلب للأعلى
+ * إن لم يتسع لها المكان أسفل الزر.
  */
 export function menu({
   label = '', name = 'more', items = [], className = 'btn btn--sm btn--ghost', align = 'end', caret = null
@@ -87,29 +90,85 @@ export function menu({
     </div>`;
 }
 
-function closeMenus(except = null) {
-  document.querySelectorAll('.menu__panel').forEach((panel) => {
-    if (panel === except) return;
-    panel.hidden = true;
-    const toggle = panel.parentElement.querySelector('[data-menu-toggle]');
-    if (toggle) toggle.setAttribute('aria-expanded', 'false');
-  });
+/** اللوحة المفتوحة حالياً مع زرها ومكانها الأصلي لإعادتها عند الإغلاق */
+let openMenu = null;
+const GAP = 6;
+const EDGE = 8;
+
+/** يضع اللوحة العائمة تحت الزر (أو فوقه) ويحصرها داخل حدود الشاشة */
+function placeMenu({ panel, toggle }) {
+  const rect = toggle.getBoundingClientRect();
+  const viewW = document.documentElement.clientWidth;
+  const viewH = window.innerHeight;
+  panel.style.maxHeight = '';
+  const width = panel.offsetWidth;
+  let height = panel.offsetHeight;
+
+  // «النهاية» في الواجهة العربية هي اليسار: تبدأ اللوحة من حافة الزر اليسرى
+  const rtl = getComputedStyle(toggle).direction === 'rtl';
+  const alignEnd = !panel.classList.contains('menu__panel--start');
+  const fromLeft = rtl === alignEnd;
+  let left = fromLeft ? rect.left : rect.right - width;
+  left = Math.min(Math.max(left, EDGE), Math.max(EDGE, viewW - width - EDGE));
+
+  const below = viewH - rect.bottom - GAP - EDGE;
+  const above = rect.top - GAP - EDGE;
+  let top;
+  if (height <= below || below >= above) {
+    top = rect.bottom + GAP;
+    if (height > below) { panel.style.maxHeight = `${below}px`; height = below; }
+  } else {
+    if (height > above) { panel.style.maxHeight = `${above}px`; height = above; }
+    top = rect.top - GAP - height;
+  }
+  panel.style.left = `${Math.round(left)}px`;
+  panel.style.top = `${Math.round(top)}px`;
+}
+
+function closeMenus() {
+  // لوحات لم تُنقل (احتياط) تُخفى في مكانها
+  document.querySelectorAll('.menu .menu__panel:not([hidden])').forEach((panel) => { panel.hidden = true; });
+  if (!openMenu) return;
+  const { panel, toggle, home } = openMenu;
+  openMenu = null;
+  panel.hidden = true;
+  panel.classList.remove('menu__panel--floating');
+  panel.removeAttribute('style');
+  toggle.setAttribute('aria-expanded', 'false');
+  // تعود اللوحة إلى قائمتها، وإن أُعيد رسم الشاشة واختفت القائمة تُحذف
+  if (home.isConnected) home.appendChild(panel); else panel.remove();
+}
+
+function openMenuFor(toggle) {
+  const home = toggle.parentElement;
+  const panel = home.querySelector('.menu__panel');
+  if (!panel) return;
+  openMenu = { panel, toggle, home };
+  panel.classList.add('menu__panel--floating');
+  document.body.appendChild(panel);
+  panel.hidden = false;
+  toggle.setAttribute('aria-expanded', 'true');
+  placeMenu(openMenu);
 }
 
 document.addEventListener('click', (event) => {
   const toggle = event.target.closest('[data-menu-toggle]');
   if (toggle) {
-    const panel = toggle.parentElement.querySelector('.menu__panel');
-    const willOpen = panel.hidden;
-    closeMenus(panel);
-    panel.hidden = !willOpen;
-    toggle.setAttribute('aria-expanded', String(willOpen));
+    const wasOpen = openMenu && openMenu.toggle === toggle;
+    closeMenus();
+    if (!wasOpen) openMenuFor(toggle);
     return;
   }
   // النقر على عنصر داخل القائمة يُغلقها بعد تنفيذ الإجراء
   closeMenus();
 });
 document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeMenus(); });
+// التمرير خارج اللوحة أو تغيير حجم الشاشة أو الانتقال لشاشة أخرى يُغلقها
+document.addEventListener('scroll', (event) => {
+  if (openMenu && !openMenu.panel.contains(event.target)) closeMenus();
+}, true);
+window.addEventListener('resize', () => closeMenus());
+window.addEventListener('hashchange', () => closeMenus());
 
 // ---------------------------------------------------------------------------
 // النوافذ المنبثقة

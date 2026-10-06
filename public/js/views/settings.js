@@ -245,9 +245,9 @@ export function changeMyCodeModal(onDone) {
 /** فترات شاشة العرض المتاحة للاختيار */
 const SCREEN_PERIODS = [
   { value: 'week', label: 'هذا الأسبوع', hint: 'فارس الأسبوع وحلقة الأسبوع' },
-  { value: 'month', label: 'هذا الشهر', hint: 'فارس الشهر وحلقة الشهر' },
-  { value: 'since', label: 'من تاريخ معيّن', hint: 'من التاريخ المختار حتى اليوم' },
-  { value: 'all', label: 'كل الأيام السابقة', hint: 'الترتيب العام منذ البداية' }
+  { value: 'month', label: 'هذا الشهر', hint: 'فارس الأسبوع، ثم فارس الشهر ونقاط الشهر' },
+  { value: 'since', label: 'من تاريخ معيّن', hint: 'فارس الأسبوع، ثم النقاط من التاريخ المختار حتى اليوم' },
+  { value: 'all', label: 'كل الأيام السابقة', hint: 'فارس الأسبوع، ثم الترتيب العام منذ البداية' }
 ];
 
 /** تاريخ اليوم بصيغة YYYY-MM-DD بالتوقيت المحلي لحقل التاريخ */
@@ -268,7 +268,8 @@ export async function screenSettingsModal(onDone) {
     title: 'فترة شاشة العرض',
     render: () => `
       <form id="screen-form">
-        <p class="muted small" style="margin-top:0">اختر الفترة التي تُحسب عليها نقاط فارس الشاشة والحلقة المتصدرة ولوحة الصدارة.</p>
+        <p class="muted small" style="margin-top:0">اختر الفترة التي تُحسب عليها نقاط الطلاب في لوحة الصدارة ومنصة التتويج.
+          فارس الأسبوع وحلقة الأسبوع يظهران دائماً، ومعهما نقاط الفترة منذ بدايتها.</p>
         <div class="period-options">
           ${SCREEN_PERIODS.map((p) => `
             <label class="period-option">

@@ -1,4 +1,7 @@
-/** شاشة العرض: تتنقل تلقائياً بين فارس الأسبوع وحلقة الأسبوع ومنصة التتويج والصدارة */
+/**
+ * شاشة العرض: تتنقل تلقائياً بين فارس الأسبوع وحلقة الأسبوع، ثم فارس الفترة
+ * ومنصة التتويج والصدارة بنقاط الفترة منذ بدايتها.
+ */
 import { icon } from './icons.js';
 
 const esc = (value) => String(value ?? '')
@@ -42,15 +45,16 @@ const title = (name, text) => `<h2 class="slide__title">${icon(name, { size: 44,
 /** عناوين الجائزتين حسب الفترة المختارة في إعدادات الشاشة (أسبوع، شهر، من تاريخ، كل الأيام) */
 const titles = () => data.titles || { knight: 'فارس الأسبوع', halaqa: 'حلقة الأسبوع' };
 
-/** فارس الفترة مع الوصيفين */
-function knightSlide() {
-  const knight = data.knight;
+/**
+ * شريحة الفارس: صورته ونقاطه، مع الوصيفين إن مُرّروا،
+ * وسطر إضافي (extra) لنقاطه منذ بداية فترة الشاشة في شريحة فارس الأسبوع.
+ */
+function knightSlide(knight, { heading, sub, runners = [], extra = '' }) {
   if (!knight) return null;
-  const runners = (data.students || []).filter((student) => student.id !== knight.id).slice(0, 2);
   return () => `
     <div class="slide">
-      ${title('medal', titles().knight)}
-      <p class="slide__sub">${esc(data.period_label)}</p>
+      ${title('medal', heading)}
+      <p class="slide__sub">${esc(sub)}</p>
       <div class="knight">
         <div class="knight__frame">
           ${knight.photo
@@ -61,6 +65,7 @@ function knightSlide() {
           <div class="knight__name">${esc(knight.name)}</div>
           <div class="knight__meta">${esc(knight.halaqa_name || '')}</div>
           <div class="knight__points">${icon('star', { size: 26 })} ${nb(knight.points)} نقطة</div>
+          ${extra}
           ${runners.length ? `
             <div class="runners">
               ${runners.map((student) => `
@@ -74,13 +79,32 @@ function knightSlide() {
     </div>`;
 }
 
-function halaqaSlide() {
-  const halaqa = data.halaqa_of_week;
+/** فارس الفترة المختارة مع الوصيفين */
+function periodKnightSlide() {
+  const knight = data.knight;
+  if (!knight) return null;
+  const runners = (data.students || []).filter((student) => student.id !== knight.id).slice(0, 2);
+  return knightSlide(knight, { heading: titles().knight, sub: data.period_label, runners });
+}
+
+/** فارس الأسبوع حين تكون فترة الشاشة أطول من أسبوع، مع نقاطه منذ بداية الفترة */
+function weekKnightSlide() {
+  const week = data.week;
+  if (!week || !week.knight) return null;
+  const knight = week.knight;
+  const extra = `
+    <div class="knight__total">${icon('calendar', { size: 22 })}
+      <span>${esc(data.period_label)}: <b>${nb(knight.period_points)}</b> نقطة${knight.period_rank ? ` · المركز <b>${nb(knight.period_rank)}</b>` : ''}</span>
+    </div>`;
+  return knightSlide(knight, { heading: 'فارس الأسبوع', sub: week.label, extra });
+}
+
+function halaqaSlide(halaqa, { heading, sub }) {
   if (!halaqa) return null;
   return () => `
     <div class="slide halaqa-card">
-      ${title('mosque', titles().halaqa)}
-      <p class="slide__sub">${esc(data.period_label)}</p>
+      ${title('mosque', heading)}
+      <p class="slide__sub">${esc(sub)}</p>
       <div class="name">${esc(halaqa.name)}</div>
       <div class="teacher">${esc(halaqa.teacher_name || '')}</div>
       <div class="knight__points">${icon('groups', { size: 26 })} ${nb(halaqa.points)} نقطة · ${nb(halaqa.students_count)} طلاب</div>
@@ -144,7 +168,16 @@ function boardSlide() {
 }
 
 function buildSlides() {
-  slides = [knightSlide(), halaqaSlide(), podiumSlide(), boardSlide()].filter(Boolean);
+  // شرائح الأسبوع أولاً (إن كانت فترة الشاشة أطول)، ثم شرائح الفترة منذ بدايتها
+  const week = data.week;
+  slides = [
+    weekKnightSlide(),
+    week ? halaqaSlide(week.halaqa, { heading: 'حلقة الأسبوع', sub: week.label }) : null,
+    periodKnightSlide(),
+    halaqaSlide(data.halaqa_of_week, { heading: titles().halaqa, sub: data.period_label }),
+    podiumSlide(),
+    boardSlide()
+  ].filter(Boolean);
   if (!slides.length) slides = [() => '<div class="empty-slide">لم تُرصد نقاط بعد — ابدأ برصد نقاط الطلاب</div>'];
   if (index >= slides.length) index = 0;
   dots.innerHTML = slides.map((_, i) => `<span class="dot ${i === index ? 'active' : ''}"></span>`).join('');
