@@ -1,6 +1,6 @@
 /**
- * شاشة العرض: تتنقل تلقائياً بين فارس الأسبوع وحلقة الأسبوع، ثم فارس الفترة
- * ومنصة التتويج والصدارة بنقاط الفترة منذ بدايتها.
+ * شاشة العرض على قسمين يتناوبان تلقائياً: فارس الأسبوع وحلقة الأسبوع، ثم النقاط
+ * التراكمية منذ بداية الرصد: المتصدر العام ومنصة التتويج وصفحات الترتيب الكامل.
  */
 import { icon } from './icons.js';
 
@@ -33,6 +33,8 @@ let slides = [];
 let index = 0;
 let timer = null;
 let rotateSeconds = 14;
+/** عدد شرائح قسم الأسبوع في أول القائمة */
+let weekCount = 0;
 
 function photo(person, cls = '') {
   return person && person.photo
@@ -79,7 +81,7 @@ function knightSlide(knight, { heading, sub, runners = [], extra = '' }) {
     </div>`;
 }
 
-/** فارس الفترة المختارة مع الوصيفين */
+/** المتصدر في النقاط التراكمية (منذ بداية الرصد أو الفترة المختارة) مع الوصيفين */
 function periodKnightSlide() {
   const knight = data.knight;
   if (!knight) return null;
@@ -87,7 +89,7 @@ function periodKnightSlide() {
   return knightSlide(knight, { heading: titles().knight, sub: data.period_label, runners });
 }
 
-/** فارس الأسبوع حين تكون فترة الشاشة أطول من أسبوع، مع نقاطه منذ بداية الفترة */
+/** فارس الأسبوع مع وصيفيه، ومعه نقاطه التراكمية ومركزه العام */
 function weekKnightSlide() {
   const week = data.week;
   if (!week || !week.knight) return null;
@@ -96,7 +98,7 @@ function weekKnightSlide() {
     <div class="knight__total">${icon('calendar', { size: 22 })}
       <span>${esc(data.period_label)}: <b>${nb(knight.period_points)}</b> نقطة${knight.period_rank ? ` · المركز <b>${nb(knight.period_rank)}</b>` : ''}</span>
     </div>`;
-  return knightSlide(knight, { heading: 'فارس الأسبوع', sub: week.label, extra });
+  return knightSlide(knight, { heading: 'فارس الأسبوع', sub: week.label, runners: week.runners || [], extra });
 }
 
 function halaqaSlide(halaqa, { heading, sub }) {
@@ -115,7 +117,7 @@ function halaqaSlide(halaqa, { heading, sub }) {
     </div>`;
 }
 
-/** منصة التتويج: الثلاثة الأوائل */
+/** منصة التتويج: الثلاثة الأوائل في النقاط التراكمية */
 function podiumSlide() {
   const top = (data.students || []).slice(0, 3);
   if (top.length < 3) return null;
@@ -139,44 +141,64 @@ function podiumSlide() {
     </div>`;
 }
 
-function boardSlide() {
-  return () => `
-    <div class="slide">
-      ${title('list', `لوحة الصدارة — ${data.period_label}`)}
-      <div class="board">
-        <div class="board__col">
-          <h3>${icon('students', { size: 26 })} ترتيب الطلاب</h3>
-          ${data.students.slice(0, 8).map((student) => `
-            <div class="row">
-              <span class="rank r${student.rank <= 3 ? student.rank : ''}">${student.rank}</span>
-              <span class="who">${photo(student)}<b>${esc(student.name)}</b>
-                <span class="sub">${esc(student.halaqa_name || '')}</span></span>
-              <span class="pts">${num(student.points)}</span>
-            </div>`).join('') || '<div class="empty-slide">لا توجد نقاط بعد</div>'}
+/** عدد الصفوف في كل عمود من صفحة الترتيب، والصفحة عمودان */
+const ROWS_PER_COLUMN = 8;
+const PER_PAGE = ROWS_PER_COLUMN * 2;
+
+const studentRow = (student) => `
+  <div class="row">
+    <span class="rank r${student.rank <= 3 ? student.rank : ''}">${student.rank}</span>
+    <span class="who">${photo(student)}<b>${esc(student.name)}</b>
+      <span class="sub">${esc(student.halaqa_name || '')}</span></span>
+    <span class="pts">${num(student.points)}</span>
+  </div>`;
+
+const halaqaRow = (halaqa) => `
+  <div class="row">
+    <span class="rank r${halaqa.rank <= 3 ? halaqa.rank : ''}">${halaqa.rank}</span>
+    <span class="who"><b>${esc(halaqa.name)}</b><span class="sub">${esc(halaqa.teacher_name || '')}</span></span>
+    <span class="pts">${num(halaqa.points)}</span>
+  </div>`;
+
+/**
+ * صفحات الترتيب الكامل بالنقاط التراكمية: كل صفحة عمودان من ٨ صفوف،
+ * وتتوزع بقية القائمة على صفحات متتالية (ترتيب الطلاب ثم ترتيب الحلقات).
+ */
+function rankingSlides(rows, { heading, name, renderRow }) {
+  const pages = [];
+  for (let i = 0; i < rows.length; i += PER_PAGE) pages.push(rows.slice(i, i + PER_PAGE));
+  return pages.map((page, p) => {
+    const columns = [page.slice(0, ROWS_PER_COLUMN), page.slice(ROWS_PER_COLUMN)].filter((col) => col.length);
+    const first = page[0].rank;
+    const last = page[page.length - 1].rank;
+    const pageInfo = pages.length > 1 ? ` · صفحة ${p + 1} من ${pages.length}` : '';
+    return () => `
+      <div class="slide">
+        ${title(name, heading)}
+        <p class="slide__sub">${esc(data.period_label)} · المراكز ${first}–${last}${pageInfo}</p>
+        <div class="board">
+          ${columns.map((col) => `<div class="board__col">${col.map(renderRow).join('')}</div>`).join('')}
         </div>
-        <div class="board__col">
-          <h3>${icon('groups', { size: 26 })} ترتيب الحلقات</h3>
-          ${data.halaqat.slice(0, 8).map((halaqa) => `
-            <div class="row">
-              <span class="rank r${halaqa.rank <= 3 ? halaqa.rank : ''}">${halaqa.rank}</span>
-              <span class="who"><b>${esc(halaqa.name)}</b><span class="sub">${esc(halaqa.teacher_name || '')}</span></span>
-              <span class="pts">${num(halaqa.points)}</span>
-            </div>`).join('') || '<div class="empty-slide">لا توجد نقاط بعد</div>'}
-        </div>
-      </div>
-    </div>`;
+      </div>`;
+  });
 }
 
 function buildSlides() {
-  // شرائح الأسبوع أولاً (إن كانت فترة الشاشة أطول)، ثم شرائح الفترة منذ بدايتها
-  const week = data.week;
-  slides = [
+  const week = data.week || {};
+  // قسم الأسبوع
+  const weekSlides = [
     weekKnightSlide(),
-    week ? halaqaSlide(week.halaqa, { heading: 'حلقة الأسبوع', sub: week.label }) : null,
+    halaqaSlide(week.halaqa, { heading: 'حلقة الأسبوع', sub: week.label || 'هذا الأسبوع' })
+  ].filter(Boolean);
+  weekCount = weekSlides.length;
+  slides = [
+    ...weekSlides,
+    // قسم النقاط التراكمية منذ بداية الرصد (أو الفترة المختارة)
     periodKnightSlide(),
     halaqaSlide(data.halaqa_of_week, { heading: titles().halaqa, sub: data.period_label }),
     podiumSlide(),
-    boardSlide()
+    ...rankingSlides(data.students || [], { heading: 'ترتيب الطلاب', name: 'students', renderRow: studentRow }),
+    ...rankingSlides(data.halaqat || [], { heading: 'ترتيب الحلقات', name: 'groups', renderRow: halaqaRow })
   ].filter(Boolean);
   if (!slides.length) slides = [() => '<div class="empty-slide">لم تُرصد نقاط بعد — ابدأ برصد نقاط الطلاب</div>'];
   if (index >= slides.length) index = 0;
@@ -186,6 +208,9 @@ function buildSlides() {
 function show(next = index) {
   index = (next + slides.length) % slides.length;
   stage.innerHTML = slides[index]();
+  // شارة الفترة أعلى الشاشة تتبع القسم المعروض: الأسبوع أو النقاط التراكمية
+  document.getElementById('period').textContent = index < weekCount
+    ? (data.week && data.week.label) || 'هذا الأسبوع' : data.period_label;
   dots.querySelectorAll('.dot').forEach((dot, i) => dot.classList.toggle('active', i === index));
   restartProgress();
 }
@@ -261,7 +286,6 @@ async function load() {
   document.title = `شاشة العرض — ${data.mosque.name}`;
   document.getElementById('academy').textContent = data.mosque.name;
   document.getElementById('subtitle').textContent = data.academy.name || '';
-  document.getElementById('period').textContent = data.period_label;
   if (data.academy.logo) document.getElementById('logo').src = data.academy.logo;
   buildSlides();
   show(index);

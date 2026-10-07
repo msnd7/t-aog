@@ -309,9 +309,22 @@ test('شاشة العرض: اختيار الفترة أسبوعاً أو شهر�
   const bad = await call('PATCH', '/api/screen/settings', { screen_period: 'since', screen_from: '' });
   assert.equal(bad.status, 400);
 
+  // الإعداد الافتراضي (الأسبوع): فارس الأسبوع + النقاط منذ بداية الرصد
+  let screen = await call('GET', '/api/screen');
+  assert.equal(screen.body.period, 'all');
+  assert.equal(screen.body.period_label, 'منذ بداية الرصد');
+  assert.equal(screen.body.range.from, null);
+  assert.equal(screen.body.week.label, 'هذا الأسبوع');
+  assert.equal(screen.body.week.knight.id, studentId);
+  assert.ok(Array.isArray(screen.body.week.runners));
+  assert.ok(screen.body.students.every((row) => row.points > 0));
+  assert.ok(screen.body.students.length >= 1);
+  const settings = await call('GET', '/api/screen/settings');
+  assert.equal(settings.body.screen_period, 'all');
+
   const month = await call('PATCH', '/api/screen/settings', { screen_period: 'month' });
   assert.equal(month.status, 200);
-  let screen = await call('GET', '/api/screen');
+  screen = await call('GET', '/api/screen');
   assert.equal(screen.body.period, 'month');
   assert.equal(screen.body.titles.knight, 'فارس الشهر');
 
@@ -333,9 +346,12 @@ test('شاشة العرض: اختيار الفترة أسبوعاً أو شهر�
   screen = await call('GET', '/api/screen');
   assert.equal(screen.body.range.from, null);
   // الرابط يتجاوز الإعداد المحفوظ
+  // ?period=week في الرابط يعني القسم التراكمي منذ بداية الرصد، والأسبوع معروض أصلاً
   screen = await call('GET', '/api/screen?period=week');
-  assert.equal(screen.body.titles.knight, 'فارس الأسبوع');
-  assert.equal(screen.body.week, null);
+  assert.equal(screen.body.period, 'all');
+  assert.equal(screen.body.week.knight.id, studentId);
+  screen = await call('GET', '/api/screen?period=month');
+  assert.equal(screen.body.titles.knight, 'فارس الشهر');
   await call('PATCH', '/api/screen/settings', { screen_period: 'week' });
 });
 
