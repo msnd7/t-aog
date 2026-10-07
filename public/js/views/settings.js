@@ -182,8 +182,9 @@ export function mount({ content, refresh }) {
 }
 
 function screenPeriodLabel(s) {
-  if (s.screen_period === 'since' && s.screen_from) return `من ${s.screen_from}`;
-  return { month: 'هذا الشهر', all: 'كل الأيام السابقة', day: 'اليوم' }[s.screen_period] || 'هذا الأسبوع';
+  if (s.screen_period === 'since' && s.screen_from) return `الأسبوع + من ${s.screen_from}`;
+  if (s.screen_period === 'month') return 'الأسبوع + هذا الشهر';
+  return 'الأسبوع + منذ بداية الرصد';
 }
 
 function staffModal(onDone) {
@@ -244,10 +245,9 @@ export function changeMyCodeModal(onDone) {
 
 /** فترات شاشة العرض المتاحة للاختيار */
 const SCREEN_PERIODS = [
-  { value: 'week', label: 'هذا الأسبوع', hint: 'فارس الأسبوع وحلقة الأسبوع' },
-  { value: 'month', label: 'هذا الشهر', hint: 'فارس الأسبوع، ثم فارس الشهر ونقاط الشهر' },
-  { value: 'since', label: 'من تاريخ معيّن', hint: 'فارس الأسبوع، ثم النقاط من التاريخ المختار حتى اليوم' },
-  { value: 'all', label: 'كل الأيام السابقة', hint: 'فارس الأسبوع، ثم الترتيب العام منذ البداية' }
+  { value: 'all', label: 'منذ بداية الرصد', hint: 'كل النقاط المرصودة منذ أول يوم' },
+  { value: 'since', label: 'من تاريخ معيّن', hint: 'النقاط من التاريخ المختار حتى اليوم (مثل بداية الفصل)' },
+  { value: 'month', label: 'هذا الشهر', hint: 'نقاط الشهر الحالي فقط' }
 ];
 
 /** تاريخ اليوم بصيغة YYYY-MM-DD بالتوقيت المحلي لحقل التاريخ */
@@ -257,7 +257,8 @@ const todayIso = () => {
 };
 
 /**
- * ضبط فترة شاشة العرض للمسجد الحالي: أسبوع، شهر، من تاريخ معيّن، أو كل الأيام السابقة.
+ * ضبط النقاط التراكمية في شاشة العرض للمسجد الحالي: منذ بداية الرصد، أو من تاريخ معيّن، أو هذا الشهر
+ * (فارس الأسبوع وحلقة الأسبوع يظهران دائماً).
  * متاح للمشرف ومدير المنصة داخل المسجد، ويُطبَّق فوراً على الشاشات المفتوحة عند تحديثها.
  */
 export async function screenSettingsModal(onDone) {
@@ -268,8 +269,9 @@ export async function screenSettingsModal(onDone) {
     title: 'فترة شاشة العرض',
     render: () => `
       <form id="screen-form">
-        <p class="muted small" style="margin-top:0">اختر الفترة التي تُحسب عليها نقاط الطلاب في لوحة الصدارة ومنصة التتويج.
-          فارس الأسبوع وحلقة الأسبوع يظهران دائماً، ومعهما نقاط الفترة منذ بدايتها.</p>
+        <p class="muted small" style="margin-top:0">تعرض الشاشة دائماً فارس الأسبوع وحلقة الأسبوع، ثم النقاط التراكمية:
+          المتصدر العام ومنصة التتويج وترتيب كل الطلاب والحلقات على صفحات متتالية.
+          اختر من أين تُجمع النقاط التراكمية.</p>
         <div class="period-options">
           ${SCREEN_PERIODS.map((p) => `
             <label class="period-option">

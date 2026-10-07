@@ -10,21 +10,25 @@ const router = express.Router();
 /** فترات شاشة العرض: أسبوع، شهر، يوم، من تاريخ معيّن، أو كل الأيام السابقة */
 const SCREEN_PERIODS = ['week', 'month', 'day', 'since', 'all'];
 
-/** عناوين الجائزتين حسب الفترة المعروضة */
+/** عناوين المتصدرَين في قسم النقاط التراكمية حسب الفترة */
 const AWARD_TITLES = {
   week: { knight: 'فارس الأسبوع', halaqa: 'حلقة الأسبوع' },
   month: { knight: 'فارس الشهر', halaqa: 'حلقة الشهر' },
   day: { knight: 'فارس اليوم', halaqa: 'حلقة اليوم' },
   since: { knight: 'فارس الفترة', halaqa: 'حلقة الفترة' },
-  all: { knight: 'الفارس الأول', halaqa: 'الحلقة الأولى' }
+  all: { knight: 'المتصدر العام', halaqa: 'الحلقة المتصدرة' }
 };
 
+/** أقصى عدد من الطلاب يُرسل لصفحات الترتيب في شاشة العرض */
+const SCREEN_BOARD_LIMIT = 150;
+
 /**
- * Everything the hall display needs in one payload:
- * فارس الأسبوع، حلقة الأسبوع، وشاشة الصدارة.
- * الفترة من الرابط (?period=&from=) إن وُجدت، وإلا من إعدادات شاشة المسجد.
- * إن كانت الفترة غير الأسبوع يُرسل فارس الأسبوع وحلقته أيضاً (week) لتعرضهما الشاشة
- * مع نقاط الفترة منذ بدايتها، ويحمل فارس الأسبوع مجموع نقاطه في الفترة (period_points).
+ * Everything the hall display needs in one payload، على قسمين:
+ * - week: فارس الأسبوع وحلقة الأسبوع ووصيفا الفارس — تظهر دائماً.
+ * - النقاط التراكمية (period): منذ بداية الرصد افتراضياً، أو الشهر، أو من تاريخ معيّن
+ *   حسب إعداد الشاشة أو الرابط (?period=&from=). إعداد «الأسبوع» القديم يُعامل
+ *   كـ«منذ بداية الرصد» لأن الأسبوع معروض أصلاً في قسم week.
+ * students وhalaqat: الترتيب التراكمي كاملاً (من له نقاط) لتوزّعه الشاشة على صفحات.
  */
 router.get('/', asyncHandler(async (req, res) => {
   const mosqueId = req.mosqueId;
@@ -33,28 +37,34 @@ router.get('/', asyncHandler(async (req, res) => {
     return res.status(403).json({ error: 'شاشة العرض متاحة بعد تسجيل الدخول' });
   }
   let period = SCREEN_PERIODS.includes(req.query.period) ? req.query.period : settings.screen_period;
-  if (!SCREEN_PERIODS.includes(period)) period = 'week';
+  if (!SCREEN_PERIODS.includes(period) || period === 'week') period = 'all';
   const since = req.query.from || settings.screen_from || null;
   if (period === 'since' && !parseDay(since)) period = 'all';
   const range = await currentRange(period, mosqueId, since);
-  const { from, to, label } = range;
-  const weekRange = period === 'week' ? null : await currentRange('week', mosqueId);
-  const [knight, halaqaWeek, board, halaqat, weekKnight, weekHalaqa] = await Promise.all([
+  const { from, to } = range;
+  const label = period === 'all' ? 'منذ بداية الرصد' : range.label;
+  const weekRange = await currentRange('week', mosqueId);
+  const [knight, halaqaTop, board, halaqat, weekKnight, weekHalaqa, weekTop] = await Promise.all([
     knightOfWeek(mosqueId, range),
     halaqaOfWeek(mosqueId, range),
     studentLeaderboard({ from, to, mosqueId }),
     halaqaLeaderboard({ from, to, mosqueId }),
-    weekRange ? knightOfWeek(mosqueId, weekRange) : null,
-    weekRange ? halaqaOfWeek(mosqueId, weekRange) : null
+    knightOfWeek(mosqueId, weekRange),
+    halaqaOfWeek(mosqueId, weekRange),
+    studentLeaderboard({ from: weekRange.from, to: weekRange.to, limit: 3, mosqueId })
   ]);
-  const students = board.slice(0, 20);
-  const periodRow = weekKnight && board.find((row) => row.id === weekKnight.id);
-  const week = weekRange ? {
+  const totalRow = weekKnight && board.find((row) => row.id === weekKnight.id);
+  const week = {
     label: weekRange.label,
     range: { from: weekRange.from, to: weekRange.to },
-    knight: weekKnight && { ...weekKnight, period_points: periodRow ? periodRow.points : 0, period_rank: periodRow ? periodRow.rank : null },
+    knight: weekKnight && {
+      ...weekKnight,
+      period_points: totalRow ? totalRow.points : 0,
+      period_rank: totalRow ? totalRow.rank : null
+    },
+    runners: weekKnight ? weekTop.filter((row) => row.id !== weekKnight.id && row.points > 0).slice(0, 2) : [],
     halaqa: weekHalaqa
-  } : null;
+  };
   res.json({
     mosque: { id: req.mosque.id, name: req.mosque.name },
     academy: {
@@ -70,10 +80,10 @@ router.get('/', asyncHandler(async (req, res) => {
     titles: AWARD_TITLES[period],
     range: { from, to },
     knight,
-    halaqa_of_week: halaqaWeek,
+    halaqa_of_week: halaqaTop,
     week,
-    students,
-    halaqat,
+    students: board.filter((row) => row.points > 0).slice(0, SCREEN_BOARD_LIMIT),
+    halaqat: halaqat.filter((row) => row.points > 0),
     updated_at: new Date().toISOString()
   });
 }));
@@ -82,7 +92,9 @@ router.get('/', asyncHandler(async (req, res) => {
 router.get('/settings', requireStaff, asyncHandler(async (req, res) => {
   const settings = await getSettings(req.mosqueId);
   res.json({
-    screen_period: SCREEN_PERIODS.includes(settings.screen_period) ? settings.screen_period : 'week',
+    // «الأسبوع» يظهر دائماً في الشاشة، فالإعداد يخص النقاط التراكمية فقط
+    screen_period: SCREEN_PERIODS.includes(settings.screen_period) && settings.screen_period !== 'week'
+      ? settings.screen_period : 'all',
     screen_from: settings.screen_from || '',
     screen_rotate_seconds: toInt(settings.screen_rotate_seconds, 14)
   });
@@ -105,7 +117,10 @@ router.patch('/settings', requireStaff, asyncHandler(async (req, res) => {
     await setMosqueSetting(req.mosqueId, 'screen_rotate_seconds', seconds);
   }
   const { label } = await currentRange(period, req.mosqueId, since);
-  res.json({ ok: true, screen_period: period, screen_from: since, period_label: label });
+  res.json({
+    ok: true, screen_period: period, screen_from: since,
+    period_label: period === 'all' || period === 'week' ? 'منذ بداية الرصد' : label
+  });
 }));
 
 /** Leaderboard used inside the app (students or halaqat, any period). */
