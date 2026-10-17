@@ -308,7 +308,71 @@ document.addEventListener('keydown', (event) => {
 });
 stage.addEventListener('click', () => { if (data && slides.length) show(index + 1); });
 
+/**
+ * توفير استهلاك قاعدة البيانات: الشاشة تجلب البيانات في ساعات الحلقات فقط (العصر إلى العشاء
+ * افتراضياً، بتوقيت جهاز العرض)، وكل ٥ دقائق بدل كل دقيقة، ولا تجلب شيئاً والصفحة مخفية.
+ * خارج الساعات تعرض شاشة انتظار بالساعة والتاريخ دون أي طلب للخادم، فتنام قاعدة البيانات.
+ * تُغيَّر الساعات من الرابط: ?hours=15:00-21:30 أو ?hours=all للعمل طوال اليوم.
+ * الضغط على الشاشة أو المسافة في وقت الانتظار يُظهر النتائج ١٥ دقيقة.
+ */
+const REFRESH_MS = 5 * 60 * 1000;
+const WAKE_MS = 15 * 60 * 1000;
+const hoursParam = new URLSearchParams(location.search).get('hours') || '15:00-21:30';
+const toMinutes = (text) => {
+  const [h, m = '0'] = String(text).trim().split(':');
+  return Number(h) * 60 + Number(m);
+};
+const ACTIVE = hoursParam === 'all' ? null : (() => {
+  const [start, end] = hoursParam.split('-').map(toMinutes);
+  return Number.isFinite(start) && Number.isFinite(end) ? { start, end } : { start: 900, end: 1290 };
+})();
+let wakeUntil = 0;
+let lastLoad = 0;
+let standby = false;
+
+function inActiveHours() {
+  if (!ACTIVE || Date.now() < wakeUntil) return true;
+  const now = new Date();
+  const minutes = now.getHours() * 60 + now.getMinutes();
+  return ACTIVE.start <= ACTIVE.end
+    ? minutes >= ACTIVE.start && minutes < ACTIVE.end
+    : minutes >= ACTIVE.start || minutes < ACTIVE.end;
+}
+
+function showStandby() {
+  if (standby) return;
+  standby = true;
+  clearInterval(timer);
+  data = null;
+  dots.innerHTML = '';
+  document.getElementById('period').textContent = 'خارج وقت الحلقات';
+  if (progress) { progress.style.transition = 'none'; progress.style.width = '0%'; }
+  stage.innerHTML = `<div class="empty-slide">تظهر النتائج في وقت الحلقات<br><small>اضغط على الشاشة لعرضها الآن</small></div>`;
+}
+
+/** يُستدعى كل دقيقة: يقرر بين شاشة الانتظار وجلب البيانات، دون أي طلب للخادم خارج الوقت */
+function tick() {
+  if (document.hidden) return;
+  if (!inActiveHours()) return showStandby();
+  if (standby || !data || Date.now() - lastLoad >= REFRESH_MS) {
+    standby = false;
+    lastLoad = Date.now();
+    load();
+  }
+}
+
+function wake(event) {
+  if (!standby) return;
+  event?.preventDefault?.();
+  event?.stopImmediatePropagation?.();
+  wakeUntil = Date.now() + WAKE_MS;
+  tick();
+}
+stage.addEventListener('click', wake, true);
+document.addEventListener('keydown', (event) => { if (event.key === ' ') wake(event); }, true);
+document.addEventListener('visibilitychange', tick);
+
 tickClock();
 setInterval(tickClock, 20000);
-load();
-setInterval(load, 60000);
+tick();
+setInterval(tick, 60000);

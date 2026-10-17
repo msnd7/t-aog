@@ -65,6 +65,14 @@ router.get('/', asyncHandler(async (req, res) => {
     runners: weekKnight ? weekTop.filter((row) => row.id !== weekKnight.id && row.points > 0).slice(0, 2) : [],
     halaqa: weekHalaqa
   };
+  // الزائر المجهول (جهاز شاشة العرض) يُخدَم من ذاكرة Vercel المؤقتة ٥ دقائق، فلا تُوقَظ
+  // قاعدة البيانات لكل شاشة أو تحديث. المسجد هنا يُحدَّد من الرابط فقط (?mosque=)،
+  // فلا يختلط مسجد بآخر. الطلبات بحساب مسجَّل لا تُخزَّن.
+  if (!req.user && req.query.mosque) {
+    res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=300, stale-while-revalidate=60');
+  } else {
+    res.setHeader('Cache-Control', 'private, no-store');
+  }
   res.json({
     mosque: { id: req.mosque.id, name: req.mosque.name },
     academy: {
