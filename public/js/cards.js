@@ -1,7 +1,7 @@
 /**
  * صفحة طباعة باركودات الطلاب.
  * ثلاث كثافات تُختار من قائمة منسدلة: ملصق متوسط (٢٤ في الصفحة)،
- * ملصق مصغّر (٤٠ في الصفحة)، وبطاقة كاملة بالصورة (١٠ في الصفحة).
+ * ملصق مصغّر (٤٠ في الصفحة)، وبطاقة كاملة بالشارة (١٠ في الصفحة).
  */
 import { drawBarcode } from './barcode.js';
 import { prettyCode } from './student-card.js';
@@ -9,7 +9,8 @@ import { prettyCode } from './student-card.js';
 const esc = (value) => String(value ?? '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const nb = (value) => `<bdi>${Number(value || 0).toLocaleString('en-US')}</bdi>`;
-const initials = (name) => String(name || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('');
+/** الحرف الأول من الاسم داخل شارة النجمة بدل صورة الطالب */
+const firstLetter = (name) => String(name || '?').trim()[0] || '?';
 
 const LAYOUTS = {
   card: { perPage: 10, barcode: { height: 38, width: 1.6 } },
@@ -37,9 +38,7 @@ function fullCard(student) {
         <span class="card__tag">بطاقة الطالب</span>
       </div>
       <div class="card__body">
-        ${student.photo
-    ? `<img class="card__photo" src="${esc(student.photo)}" alt="">`
-    : `<span class="card__photo">${esc(initials(student.name))}</span>`}
+        <span class="card__emblem"><b>${esc(firstLetter(student.name))}</b></span>
         <div>
           <div class="card__name">${esc(student.name)}</div>
           <div class="card__halaqa">${esc(student.halaqa_name || 'بدون حلقة')}</div>

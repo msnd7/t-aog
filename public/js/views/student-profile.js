@@ -25,7 +25,6 @@ export async function render({ params, state }) {
     className: 'btn btn--sm btn--ghost',
     items: [
       menuItem({ label: 'تعديل بيانات الطالب', name: 'edit', attrs: 'data-edit' }),
-      menuItem({ label: 'تغيير الصورة', name: 'image', attrs: 'data-photo' }),
       menuItem({ label: 'طباعة البطاقة', name: 'barcode', attrs: 'data-print-card' }),
       menuSep(),
       menuItem({ label: 'إعادة الرمز المؤقت', name: 'key', danger: true, attrs: 'data-reset-code' })
@@ -35,7 +34,7 @@ export async function render({ params, state }) {
       <div class="grid cols-2">
         <div class="card">
           <div class="row" style="gap:1rem">
-            ${avatar(student, 'avatar--lg')}
+            ${avatar(student, 'avatar--lg', { rank: rank.rank })}
             <div style="flex:1">
               <h2 style="margin:0">${esc(student.name)}</h2>
               <p class="muted small">${esc(student.halaqa_name || 'بدون حلقة')}${student.teacher_name ? ` · ${esc(student.teacher_name)}` : ''}</p>
@@ -115,7 +114,6 @@ export function mount({ content, refresh }) {
   document.querySelector('[data-cheque]').onclick = () => chequeModal([student], refresh);
   document.querySelector('[data-edit]').onclick = () => editModal(student, current.halaqat, refresh);
   document.querySelector('[data-print-card]').onclick = () => cardsModal({ studentIds: [student.id] });
-  document.querySelector('[data-photo]').onclick = () => photoModal(student, refresh);
   document.querySelector('[data-reset-code]').onclick = async () => {
     if (!await confirmDialog(`إعادة رمز ${student.name} إلى الرمز المؤقت؟ سيُطلب منه اختيار رمز جديد عند الدخول.`,
       { confirmText: 'إعادة الرمز', danger: false })) return;
@@ -166,31 +164,6 @@ function editModal(student, halaqat, onDone) {
         try {
           await api.patch(`/api/students/${student.id}`, formValues(event.target));
           ok('تم الحفظ');
-          close();
-          if (onDone) onDone();
-        } catch (error) { fail(error.message); }
-      };
-    }
-  });
-}
-
-function photoModal(student, onDone) {
-  modal({
-    title: 'صورة الطالب',
-    render: () => `
-      <form id="photo-form">
-        <div class="field">
-          <label>اختر صورة</label>
-          <input type="file" name="photo" accept="image/*" required>
-        </div>
-        <button class="btn btn--block" type="submit">رفع الصورة</button>
-      </form>`,
-    onMount: (root, close) => {
-      root.querySelector('#photo-form').onsubmit = async (event) => {
-        event.preventDefault();
-        try {
-          await api.upload(`/api/students/${student.id}/photo`, new FormData(event.target));
-          ok('تم تحديث الصورة');
           close();
           if (onDone) onDone();
         } catch (error) { fail(error.message); }

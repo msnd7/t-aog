@@ -6,7 +6,8 @@ const esc = (value) => String(value ?? '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
-const initials = (name) => String(name || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('');
+/** الحرف الأول من الاسم داخل شارة النجمة بدل صورة الطالب */
+const firstLetter = (name) => String(name || '?').trim()[0] || '?';
 
 /** RQ00026 ← يُعرض كـ RQ 000 26 ليسهل نطقه وقراءته */
 export function prettyCode(code) {
@@ -17,7 +18,7 @@ export function prettyCode(code) {
 }
 
 /**
- * بطاقة الطالب بتصميم بطاقة العضوية: شعار المجمع، صورة الطالب واسمه،
+ * بطاقة الطالب بتصميم بطاقة العضوية: شعار المجمع، شارة الطالب واسمه،
  * ولوحة بيضاء يظهر فيها الباركود بمساحة هدوء كافية للقارئ.
  */
 export function studentCardMarkup(student, { logo = '/img/logo.jpg', academy = 'رياض القرآن', points = null, compact = false } = {}) {
@@ -33,9 +34,7 @@ export function studentCardMarkup(student, { logo = '/img/logo.jpg', academy = '
       </header>
 
       <div class="id-card__body">
-        ${student.photo
-      ? `<img class="id-card__photo" src="${esc(student.photo)}" alt="">`
-      : `<span class="id-card__photo">${esc(initials(student.name))}</span>`}
+        <span class="id-card__emblem"><b>${esc(firstLetter(student.name))}</b></span>
         <div class="id-card__id">
           <div class="id-card__name">${esc(student.name)}</div>
           <div class="id-card__meta">${esc(student.halaqa_name || 'بدون حلقة')}</div>

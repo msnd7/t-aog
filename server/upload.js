@@ -6,7 +6,8 @@ const { db, UPLOAD_DIR, UPLOADS_IN_DB } = require('./db');
 const { nowIso } = require('./util');
 
 const ALLOWED = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']);
-const MAX_BYTES = 6 * 1024 * 1024;
+/** الواجهة تصغّر الصور قبل الرفع، وهذا سقف للحماية من الصور الضخمة */
+const MAX_BYTES = 3 * 1024 * 1024;
 /** تُقسَّم الصورة إلى قطع صغيرة كي لا تتجاوز حدّ حجم الصف في القواعد البعيدة. */
 const CHUNK_BYTES = 256 * 1024;
 

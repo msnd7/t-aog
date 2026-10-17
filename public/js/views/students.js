@@ -1,7 +1,7 @@
 /** شاشة الأفراد: قائمة الطلاب، إضافة، نقاط، شيكات وبطاقات الباركود */
 import { api } from '../api.js';
 import {
-  esc, num, avatar, rankBadge, emptyState, modal, formValues, ok, fail, confirmDialog,
+  esc, num, rankBadge, emptyState, modal, formValues, ok, fail, confirmDialog,
   icon, pick, searchPick, periodPick, menu, menuItem, menuSep
 } from '../ui.js';
 import { awardPointsModal, printCards, printCheques } from './shared.js';
@@ -90,7 +90,6 @@ export async function render() {
                   <td>${rankBadge(student.rank)}</td>
                   <td>
                     <a class="person" href="#/students/${student.id}" style="text-decoration:none;color:inherit">
-                      ${avatar(student)}
                       <span><strong>${esc(student.name)}</strong><span dir="ltr">${esc(student.barcode || '')}</span></span>
                     </a>
                   </td>
@@ -210,12 +209,12 @@ export function cardsModal({ halaqaId = null, studentIds = [] } = {}) {
     options: [
       { value: 'label', label: 'ملصقات متوسطة — ٢٤ باركود في الصفحة' },
       { value: 'mini', label: 'ملصقات مصغّرة — ٤٠ باركود في الصفحة' },
-      { value: 'card', label: 'بطاقات كاملة بالصورة — ١٠ في الصفحة' }
+      { value: 'card', label: 'بطاقات كاملة بالشارة — ١٠ في الصفحة' }
     ]
   })}
         <p class="muted small mt">${icon('info', { size: 16 })}
           الملصقات تطبع أكبر عدد ممكن في الصفحة الواحدة لتسهيل القص والتوزيع،
-          والبطاقات الكاملة بمقاس البطاقة البنكية وفيها صورة الطالب.</p>
+          والبطاقات الكاملة بمقاس البطاقة البنكية وفيها شارة الطالب.</p>
         <button class="btn btn--block mt" type="submit">${icon('print', { size: 18 })} فتح صفحة الطباعة</button>
       </form>`,
     onMount: (root, close) => {

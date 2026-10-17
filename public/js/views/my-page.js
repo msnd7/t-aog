@@ -1,6 +1,6 @@
-/** الصفحة الشخصية للطالب: نقاطه، باركوده، وصورته */
+/** الصفحة الشخصية للطالب: نقاطه وباركوده وشارة مركزه */
 import { api } from '../api.js';
-import { esc, num, nb, avatar, dateAr, emptyState, modal, ok, fail, icon } from '../ui.js';
+import { esc, num, avatar, dateAr, emptyState, icon } from '../ui.js';
 import { studentCardMarkup, mountStudentCards, openScanMode } from '../student-card.js';
 import { changeMyCodeModal } from './settings.js';
 
@@ -28,10 +28,9 @@ export async function render({ state }) {
         </div>
 
         <div class="card center">
-          <div style="display:flex;justify-content:center">${avatar(student, 'avatar--xl')}</div>
+          <div style="display:flex;justify-content:center">${avatar(student, 'avatar--xl', { rank: rank.rank })}</div>
           <h2 class="mt" style="margin-bottom:0">${esc(student.name)}</h2>
           <p class="muted small">${esc(student.halaqa_name || 'بدون حلقة')}</p>
-          <button class="btn btn--sm btn--ghost" data-photo>${icon('image', { size: 16 })} تغيير صورتي</button>
           <div class="grid cols-3 mt">
             <div class="stat stat--green"><span class="stat__label">${icon('wallet', { size: 16 })} رصيدي</span><span class="stat__value">${num(wallet.balance)}</span></div>
             <div class="stat stat--blue"><span class="stat__label">${icon('points', { size: 16 })} هذا الأسبوع</span><span class="stat__value">${num(data.week_points)}</span></div>
@@ -56,34 +55,11 @@ export async function render({ state }) {
   };
 }
 
-export function mount({ content, refresh }) {
+export function mount({ content }) {
   mountStudentCards(content);
   const student = mine.student;
 
   content.querySelector('[data-scan-mode]').onclick = () => openScanMode(student);
-
-  content.querySelector('[data-photo]').onclick = () => {
-    modal({
-      title: 'تغيير صورتي',
-      render: () => `
-        <form id="photo-form">
-          <div class="field"><label>اختر صورة من جهازك</label><input type="file" name="photo" accept="image/*" capture="user" required></div>
-          <span class="hint">ستظهر صورتك في شاشة فارس الأسبوع وفي الصدارة.</span>
-          <button class="btn btn--block mt" type="submit">رفع الصورة</button>
-        </form>`,
-      onMount: (root, close) => {
-        root.querySelector('#photo-form').onsubmit = async (event) => {
-          event.preventDefault();
-          try {
-            await api.upload(`/api/students/${student.id}/photo`, new FormData(event.target));
-            ok('تم تحديث صورتك');
-            close();
-            refresh();
-          } catch (error) { fail(error.message); }
-        };
-      }
-    });
-  };
 
   document.querySelector('[data-change-code]').onclick = () => changeMyCodeModal();
 }

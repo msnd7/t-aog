@@ -25,6 +25,8 @@ function verifyCode(code, stored) {
 async function createSession(userId) {
   const token = randomToken();
   const expires = new Date(Date.now() + SESSION_DAYS * 86400000).toISOString();
+  // الجلسات المنتهية تُحذف مع كل دخول جديد حتى لا يتضخم الجدول
+  await db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(nowIso());
   await db.prepare('INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)')
     .run(token, userId, nowIso(), expires);
   return { token, expires };
@@ -42,7 +44,6 @@ function publicUser(user) {
     role: user.role,
     name: user.name,
     halaqa_id: user.halaqa_id,
-    photo: user.photo,
     barcode: user.barcode,
     mosque_id: user.mosque_id || null,
     must_change_code: user.must_change_code === 1

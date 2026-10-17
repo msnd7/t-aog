@@ -63,7 +63,7 @@ router.get('/', requireAdmin, asyncHandler(async (req, res) => {
       balance: balance.get(mosque.id) || 0,
       pending_orders: pending.get(mosque.id) || 0,
       week_cheques: (cheques.get(mosque.id) || 0) + (vouchers.get(mosque.id) || 0),
-      knight: knight ? { id: knight.id, name: knight.name, photo: knight.photo, points: knight.points, halaqa_name: knight.halaqa_name } : null,
+      knight: knight ? { id: knight.id, name: knight.name, points: knight.points, halaqa_name: knight.halaqa_name } : null,
       halaqa_of_week: halaqa ? { id: halaqa.id, name: halaqa.name, points: halaqa.points } : null
     });
   }

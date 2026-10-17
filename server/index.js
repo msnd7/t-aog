@@ -61,14 +61,15 @@ function ensureAdminReady() {
 // على الاستضافات بلا خادم (Vercel) حيث قد تتزامن أول الطلبات مع التجهيز.
 app.use(asyncHandler(async (req, res, next) => { await ensureAdminReady(); next(); }));
 
-// Uploaded photos (student pictures, reward pictures, custom logo).
+// الصور المرفوعة (صور الجوائز والشعار).
 // على الاستضافات بلا قرص دائم تُحفظ الصور في قاعدة البيانات وتُقدَّم من هنا.
+// اسم كل صورة فريد ولا يتغير محتواه، فتحفظها ذاكرة Vercel سنة كاملة ولا تُوقَظ القاعدة لعرضها.
 if (UPLOADS_IN_DB) {
   app.get('/uploads/:name', asyncHandler(async (req, res) => {
     const file = await readFromDatabase(req.params.name);
     if (!file) return res.status(404).send('غير موجود');
     res.setHeader('Content-Type', file.mime);
-    res.setHeader('Cache-Control', 'public, max-age=604800');
+    res.setHeader('Cache-Control', 'public, max-age=604800, s-maxage=31536000, immutable');
     res.send(file.body);
   }));
 }
@@ -106,7 +107,8 @@ app.use((req, res) => {
 app.use((err, req, res, next) => {
   const status = err.status || (err.code === 'LIMIT_FILE_SIZE' ? 413 : 500);
   if (status >= 500) console.error(err);
-  res.status(status).json({ error: err.message || 'حدث خطأ غير متوقع' });
+  const message = err.code === 'LIMIT_FILE_SIZE' ? 'حجم الصورة كبير، اختر صورة أصغر' : err.message;
+  res.status(status).json({ error: message || 'حدث خطأ غير متوقع' });
 });
 
 if (require.main === module) {

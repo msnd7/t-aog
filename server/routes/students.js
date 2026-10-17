@@ -4,7 +4,6 @@ const { db, getSettings } = require('../db');
 const { hashCode, requireAuth, requireStaff } = require('../auth');
 const { nowIso, makeBarcode, toInt, normalizePhone, asyncHandler } = require('../util');
 const { studentLeaderboard, studentWallet, studentRank, currentRange } = require('../stats');
-const { upload, uploadUrl } = require('../upload');
 
 const router = express.Router();
 
@@ -84,7 +83,7 @@ router.get('/:id', requireAuth, asyncHandler(async (req, res) => {
   const id = toInt(req.params.id);
   if (!isStaff(req.user) && req.user.id !== id) return res.status(403).json({ error: 'غير مصرح' });
   const student = await db.prepare(`
-    SELECT u.id, u.name, u.phone, u.photo, u.barcode, u.halaqa_id, u.active, u.created_at, u.must_change_code,
+    SELECT u.id, u.name, u.phone, u.barcode, u.halaqa_id, u.active, u.created_at, u.must_change_code,
            h.name AS halaqa_name, h.teacher_name
       FROM users u LEFT JOIN halaqat h ON h.id = u.halaqa_id
      WHERE u.id = ? AND u.role = 'student' AND u.mosque_id = ?
@@ -181,7 +180,7 @@ router.patch('/:id', requireAuth, asyncHandler(async (req, res) => {
   await db.prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`).run(...params);
   res.json({
     ok: true,
-    student: await db.prepare('SELECT id, name, phone, halaqa_id, active, barcode, photo FROM users WHERE id = ?').get(id)
+    student: await db.prepare('SELECT id, name, phone, halaqa_id, active, barcode FROM users WHERE id = ?').get(id)
   });
 }));
 
@@ -194,18 +193,6 @@ router.post('/:id/reset-code', requireStaff, asyncHandler(async (req, res) => {
   await db.prepare('UPDATE users SET code_hash = ?, must_change_code = 1 WHERE id = ?').run(hashCode(code), id);
   await db.prepare('DELETE FROM sessions WHERE user_id = ?').run(id);
   res.json({ ok: true, code });
-}));
-
-/** الصورة الشخصية — يرفعها الطالب بنفسه أو المشرف نيابة عنه */
-router.post('/:id/photo', requireAuth, upload.single('photo'), asyncHandler(async (req, res) => {
-  const id = toInt(req.params.id);
-  if (!isStaff(req.user) && req.user.id !== id) return res.status(403).json({ error: 'غير مصرح' });
-  if (!req.file) return res.status(400).json({ error: 'لم يتم اختيار صورة' });
-  const owner = await db.prepare("SELECT id FROM users WHERE id = ? AND role = 'student' AND mosque_id = ?").get(id, req.mosqueId);
-  if (!owner) return res.status(404).json({ error: 'الطالب غير موجود' });
-  const url = uploadUrl(req.file.filename);
-  await db.prepare('UPDATE users SET photo = ? WHERE id = ?').run(url, id);
-  res.json({ ok: true, photo: url });
 }));
 
 router.delete('/:id', requireStaff, asyncHandler(async (req, res) => {

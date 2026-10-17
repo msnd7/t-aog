@@ -23,17 +23,32 @@ export function initials(name) {
   return String(name || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('');
 }
 
-/** صورة الطالب أو الأحرف الأولى من اسمه */
-export function avatar(person, size = '') {
-  const cls = `avatar ${size}`.trim();
-  if (person && person.photo) {
-    return `<img class="${cls}" src="${esc(person.photo)}" alt="${esc(person.name)}" loading="lazy">`;
+/** لون شارة الطالب: ثابت لكل طالب ومأخوذ من ألوان الهوية */
+const EMBLEM_TONES = 4;
+function toneOf(person) {
+  const key = String((person && (person.id ?? person.name)) || '');
+  let hash = 0;
+  for (const ch of key) hash = (hash * 31 + ch.codePointAt(0)) >>> 0;
+  return hash % EMBLEM_TONES;
+}
+
+const rankTone = (rank) => (rank <= 3 ? rank : 'n');
+
+/**
+ * شارة الطالب بدل الصورة: نجمة ثمانية بألوان الهوية. مع `rank` تحمل رقم مركزه
+ * (ذهبية للأول، فضية للثاني، خضراء للثالث)، وبدونه الحرف الأول من اسمه.
+ */
+export function avatar(person, size = '', { rank = 0 } = {}) {
+  const name = esc((person && person.name) || '');
+  if (rank) {
+    return `<span class="avatar ${size} em-${rankTone(rank)}" title="المركز ${rank}"><b>${num(rank)}</b></span>`;
   }
-  return `<span class="${cls}">${esc(initials(person && person.name))}</span>`;
+  const letter = String((person && person.name) || '?').trim()[0] || '?';
+  return `<span class="avatar ${size} em-t${toneOf(person)}" title="${name}"><b>${esc(letter)}</b></span>`;
 }
 
 export function rankBadge(rank) {
-  return `<span class="rank-badge rank-${rank <= 3 ? rank : 'n'}">${rank}</span>`;
+  return `<span class="rank-badge em-${rankTone(rank)}"><b>${num(rank)}</b></span>`;
 }
 
 export function toast(message, type = '') {

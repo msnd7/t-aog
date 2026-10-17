@@ -11,7 +11,7 @@ const { chequeCatalog } = require('../catalog');
 const router = express.Router();
 
 const PUBLIC_KEYS = ['academy_name', 'academy_subtitle', 'currency', 'scan_points',
-  'screen_rotate_seconds', 'allow_student_photo_upload', 'logo', 'public_screen', 'default_code'];
+  'screen_rotate_seconds', 'logo', 'public_screen', 'default_code'];
 
 const defaultCode = async () => (await getSettings()).default_code || '1234';
 
