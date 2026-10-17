@@ -30,7 +30,7 @@ export async function render({ state }) {
           ${top.map((row) => `
             <div class="card center" style="border-top:5px solid ${row.rank === 1 ? 'var(--sun-500)' : row.rank === 2 ? '#b9cbd0' : 'var(--sage-500)'}">
               <div style="display:flex;justify-content:center;margin-bottom:.4rem">
-                ${view.scope === 'students' ? avatar(row, 'avatar--lg') : `<span class="avatar avatar--lg">${row.rank}</span>`}
+                ${avatar(row, 'avatar--lg', { rank: row.rank })}
               </div>
               <strong style="font-size:1.1rem">${esc(row.name)}</strong>
               <p class="muted small">${esc(view.scope === 'students' ? (row.halaqa_name || 'بدون حلقة') : (row.teacher_name || ''))}</p>
@@ -49,7 +49,7 @@ export async function render({ state }) {
                   <tr>
                     <td>${rankBadge(row.rank)}</td>
                     <td>${view.scope === 'students'
-                      ? `<a class="person" href="#/students/${row.id}" style="text-decoration:none;color:inherit">${avatar(row)}<span><strong>${esc(row.name)}</strong></span></a>`
+                      ? `<a class="person" href="#/students/${row.id}" style="text-decoration:none;color:inherit"><strong>${esc(row.name)}</strong></a>`
                       : `<strong>${esc(row.name)}</strong>`}</td>
                     <td>${esc(view.scope === 'students' ? (row.halaqa_name || '—') : (row.teacher_name || '—'))}</td>
                     <td class="num"><span class="points-pill">${num(row.points)}</span></td>

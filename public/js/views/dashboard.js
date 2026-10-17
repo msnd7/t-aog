@@ -53,7 +53,7 @@ export async function render() {
           <h2>${icon('medal', { size: 20 })} فارس الأسبوع</h2>
           ${knight ? `
             <div class="hero__body">
-              ${avatar(knight, 'avatar--lg')}
+              ${avatar(knight, 'avatar--lg', { rank: 1 })}
               <div>
                 <div class="name">${esc(knight.name)}</div>
                 <div class="meta">${esc(knight.halaqa_name || 'بدون حلقة')}</div>
@@ -85,7 +85,6 @@ export async function render() {
               ${screen.students.slice(0, 10).map((student) => `
                 <a class="list__item" href="#/students/${student.id}" style="text-decoration:none;color:inherit">
                   ${rankBadge(student.rank)}
-                  ${avatar(student)}
                   <div style="flex:1">
                     <strong>${esc(student.name)}</strong>
                     <span class="muted small">${esc(student.halaqa_name || 'بدون حلقة')}</span>

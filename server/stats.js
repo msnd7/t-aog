@@ -26,7 +26,7 @@ async function studentLeaderboard({ from = null, to = null, halaqaId = null, lim
   if (mosqueId) { where += ' AND u.mosque_id = ?'; params.push(mosqueId); }
   if (halaqaId) { where += ' AND u.halaqa_id = ?'; params.push(halaqaId); }
   let sql = `
-    SELECT u.id, u.name, u.photo, u.barcode, u.phone, u.halaqa_id, u.mosque_id,
+    SELECT u.id, u.name, u.barcode, u.phone, u.halaqa_id, u.mosque_id,
            h.name AS halaqa_name, m.name AS mosque_name,
            COALESCE(SUM(CASE WHEN e.points > 0 THEN e.points ELSE 0 END), 0) AS points,
            COALESCE(SUM(e.points), 0) AS net_points

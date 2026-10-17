@@ -139,7 +139,7 @@ router.post('/scan', requireStaff, asyncHandler(async (req, res) => {
   if (recent) {
     return res.status(409).json({
       error: `تم مسح باركود ${student.name} قبل قليل`,
-      student: { id: student.id, name: student.name, photo: student.photo, halaqa_name: student.halaqa_name },
+      student: { id: student.id, name: student.name, halaqa_name: student.halaqa_name },
       wallet: await studentWallet(student.id),
       duplicate: true
     });
@@ -155,7 +155,7 @@ router.post('/scan', requireStaff, asyncHandler(async (req, res) => {
     kind: 'student',
     points,
     student: {
-      id: student.id, name: student.name, photo: student.photo,
+      id: student.id, name: student.name,
       barcode: student.barcode, halaqa_name: student.halaqa_name
     },
     wallet: await studentWallet(student.id)

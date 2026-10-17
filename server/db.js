@@ -574,7 +574,6 @@ const DEFAULT_SETTINGS = {
   cheque_recitation_both: '50',
   cheque_discipline: '25',
   screen_rotate_seconds: '14',
-  allow_student_photo_upload: '1',
   // المتجر: 1 الشراء مفتوح لكل الجوائز، 0 مقفل (تبقى الجوائز ظاهرة للطلاب)
   store_open: '1',
   // فترة شاشة العرض: week · month · since (من تاريخ screen_from) · all (كل الأيام السابقة)
@@ -611,7 +610,7 @@ const MOSQUE_SETTING_KEYS = [
   'currency', 'scan_points', 'scan_cooldown_seconds', 'week_start_day',
   'cheque_attendance_early', 'cheque_attendance_general', 'cheque_recitation_hifz',
   'cheque_recitation_review', 'cheque_recitation_both', 'cheque_discipline',
-  'screen_rotate_seconds', 'allow_student_photo_upload', 'public_screen',
+  'screen_rotate_seconds', 'public_screen',
   'store_open', 'screen_period', 'screen_from'
 ];
 
@@ -696,6 +695,17 @@ async function initSchema() {
   await seedDefaultSettings();
   await migrateMosques();
   await migrateRewards();
+  await purgeExpiredSessions();
+}
+
+/** الجلسات المنتهية لا فائدة منها: تُحذف مع كل تشغيل ومع كل دخول جديد */
+async function purgeExpiredSessions() {
+  try {
+    await rawRun('DELETE FROM sessions WHERE expires_at < ?', [new Date().toISOString()]);
+  } catch (err) {
+    // تحسين لا شرط: لا يوقف تشغيل المنصة إن تعذّر
+    console.error('تعذّر حذف الجلسات المنتهية:', err);
+  }
 }
 
 /**

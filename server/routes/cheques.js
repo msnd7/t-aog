@@ -30,7 +30,7 @@ function hydrate(cheque, currency) {
 }
 
 const CHEQUE_QUERY = `
-  SELECT c.*, u.name AS student_name, u.photo AS student_photo, u.barcode AS student_barcode,
+  SELECT c.*, u.name AS student_name, u.barcode AS student_barcode,
          h.name AS halaqa_name, a.name AS issued_by_name
     FROM cheques c
     JOIN users u ON u.id = c.student_id
@@ -325,7 +325,7 @@ router.post('/vouchers/redeem', requireStaff, asyncHandler(async (req, res) => {
     points: voucher.points,
     voucher: { ...voucher, student_id: student.id, redeemed_at: at },
     student: {
-      id: student.id, name: student.name, photo: student.photo,
+      id: student.id, name: student.name,
       barcode: student.barcode, halaqa_name: student.halaqa_name
     },
     wallet: await studentWallet(student.id)

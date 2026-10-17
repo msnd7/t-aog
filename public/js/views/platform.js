@@ -2,7 +2,7 @@
 import { api } from '../api.js';
 import { enterMosque } from '../app.js';
 import {
-  esc, num, nb, avatar, rankBadge, emptyState, icon, menu, menuItem, modal, formValues, ok, fail, confirmDialog
+  esc, num, nb, rankBadge, emptyState, icon, menu, menuItem, modal, formValues, ok, fail, confirmDialog
 } from '../ui.js';
 
 export async function render() {
@@ -80,7 +80,6 @@ export async function render() {
               ${data.top_students.map((student) => `
                 <div class="list__item">
                   ${rankBadge(student.rank)}
-                  ${avatar(student)}
                   <div style="flex:1">
                     <strong>${esc(student.name)}</strong>
                     <span class="muted small">${esc(student.mosque_name || '')}${student.halaqa_name ? ` · ${esc(student.halaqa_name)}` : ''}</span>

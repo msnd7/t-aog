@@ -98,23 +98,30 @@ test('ترقيم السجلات الجديدة سليم عبر السائق', { 
 });
 
 test('الصورة المرفوعة تُحفظ في قاعدة البيانات وتُقدَّم كاملة', { skip: !libsqlAvailable }, async () => {
-  const created = await call('POST', '/api/students', { name: 'طالب الصورة' });
-  assert.equal(created.status, 201);
-
   // أكبر من قطعة تخزين واحدة، للتأكد من تجميع القطع عند القراءة
   const png = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.alloc(700 * 1024, 7)]);
   const form = new FormData();
-  form.append('photo', new Blob([png], { type: 'image/png' }), 'p.png');
+  form.append('logo', new Blob([png], { type: 'image/png' }), 'p.png');
 
-  const uploaded = await call('POST', `/api/students/${created.body.student.id}/photo`, undefined, form);
+  const uploaded = await call('POST', '/api/settings/logo', undefined, form);
   assert.equal(uploaded.status, 200);
-  assert.match(uploaded.body.photo, /^\/uploads\//);
+  assert.match(uploaded.body.logo, /^\/uploads\//);
 
-  const fetched = await fetch(base + uploaded.body.photo);
+  const fetched = await fetch(base + uploaded.body.logo);
   assert.equal(fetched.status, 200);
   assert.equal(fetched.headers.get('content-type'), 'image/png');
   assert.ok(Buffer.from(await fetched.arrayBuffer()).equals(png));
 
   const missing = await fetch(`${base}/uploads/la-shay2.png`);
   assert.equal(missing.status, 404);
+});
+
+test('صور الطلاب أُلغيت: لا يوجد مسار لرفعها', { skip: !libsqlAvailable }, async () => {
+  const created = await call('POST', '/api/students', { name: 'طالب بلا صورة' });
+  assert.equal(created.status, 201);
+  assert.equal(created.body.student.photo, undefined);
+  const form = new FormData();
+  form.append('photo', new Blob([Buffer.from('89504e470d0a1a0a', 'hex')], { type: 'image/png' }), 'p.png');
+  const uploaded = await call('POST', `/api/students/${created.body.student.id}/photo`, undefined, form);
+  assert.equal(uploaded.status, 404);
 });

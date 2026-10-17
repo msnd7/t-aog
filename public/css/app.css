@@ -602,26 +602,50 @@ tbody tr:last-child td { border-bottom: 0; }
 td.num, th.num { font-variant-numeric: tabular-nums; }
 
 /* ---- عناصر الأشخاص ------------------------------------------------------ */
-.avatar {
-  width: 44px; height: 44px; border-radius: 50%; object-fit: cover;
-  background: linear-gradient(135deg, var(--brand-100), var(--sage-100));
-  display: inline-grid; place-content: center; color: var(--brand-700); font-weight: 800; flex: 0 0 auto;
+/*
+ * شارة الطالب بدل الصورة: نجمة ثمانية (مربعان متراكبان أحدهما مدار ٤٥ درجة)
+ * وفي وسطها دائرة بحدّ رفيع تحمل الحرف الأول من الاسم أو رقم المركز.
+ */
+.avatar, .rank-badge {
+  --em-bg: var(--brand-100); --em-fg: var(--brand-700); --em-ring: rgba(23, 86, 110, .22);
+  position: relative; isolation: isolate; display: inline-grid; place-content: center;
+  width: 46px; height: 46px; flex: 0 0 auto; color: var(--em-fg);
+  font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1;
 }
-.avatar--lg { width: 92px; height: 92px; font-size: 1.9rem; }
-.avatar--xl { width: 148px; height: 148px; font-size: 2.9rem; border: 5px solid #fff; box-shadow: var(--shadow); }
+.avatar::before, .avatar::after, .rank-badge::before, .rank-badge::after {
+  content: ''; position: absolute; inset: 15%; border-radius: 24%; background: var(--em-bg); z-index: -1;
+}
+.avatar::after, .rank-badge::after { transform: rotate(45deg); }
+.avatar b, .rank-badge b {
+  display: grid; place-content: center; width: 1.9em; height: 1.9em; border-radius: 50%;
+  box-shadow: inset 0 0 0 .09em var(--em-ring); font-weight: 800; color: var(--em-fg);
+}
+.person .avatar { font-size: 1rem; }
+.avatar--lg { width: 96px; height: 96px; font-size: 1.9rem; }
+.avatar--xl { width: 156px; height: 156px; font-size: 3rem; }
+.avatar--lg, .avatar--xl { filter: drop-shadow(0 10px 14px rgba(7, 31, 42, .22)); }
+img.avatar { border-radius: 14px; object-fit: cover; }
+
+/* ألوان الحروف: ثابتة لكل طالب */
+.em-t0 { --em-bg: var(--brand-800); --em-fg: #fff; --em-ring: rgba(255, 255, 255, .45); }
+.em-t1 { --em-bg: var(--brand-600); --em-fg: #fff; --em-ring: rgba(255, 255, 255, .45); }
+.em-t2 { --em-bg: var(--sage-600); --em-fg: #fff; --em-ring: rgba(255, 255, 255, .5); }
+.em-t3 { --em-bg: var(--brand-950); --em-fg: var(--sun-400); --em-ring: rgba(245, 176, 85, .5); }
+/* ألوان المراكز: ذهبي ثم فضي ثم أخضر */
+.em-1 { --em-bg: var(--sun-500); --em-fg: #fff; --em-ring: rgba(255, 255, 255, .6); }
+.em-2 { --em-bg: #9db0b7; --em-fg: #fff; --em-ring: rgba(255, 255, 255, .6); }
+.em-3 { --em-bg: var(--sage-600); --em-fg: #fff; --em-ring: rgba(255, 255, 255, .55); }
+.em-n { --em-bg: var(--bg-deep); --em-fg: var(--ink-soft); --em-ring: transparent; }
+.avatar--lg.em-n, .avatar--xl.em-n { --em-bg: var(--brand-800); --em-fg: #fff; --em-ring: rgba(255, 255, 255, .45); }
+.em-1::before { background: #f7bd62; }
+.rank-badge.em-1 { filter: drop-shadow(0 4px 6px rgba(209, 125, 12, .45)); }
 
 .person { display: flex; align-items: center; gap: .6rem; }
 .person strong { display: block; font-size: .94rem; }
 .person span { color: var(--muted); font-size: .79rem; }
 
-.rank-badge {
-  width: 30px; height: 30px; border-radius: 10px; display: inline-grid; place-content: center;
-  font-weight: 800; font-size: .84rem; background: var(--bg-deep); color: var(--muted);
-  font-variant-numeric: tabular-nums; flex: 0 0 auto;
-}
-.rank-1 { background: var(--grad-sun); color: #fff; box-shadow: 0 6px 14px -6px rgba(209, 125, 12, .8); }
-.rank-2 { background: linear-gradient(135deg, #cfdade, #9db0b7); color: #fff; }
-.rank-3 { background: var(--grad-sage); color: #fff; }
+.rank-badge { width: 38px; height: 38px; font-size: .8rem; }
+.rank-badge b { width: auto; height: auto; box-shadow: none; }
 
 /* ---- حالات فارغة --------------------------------------------------------- */
 .empty { text-align: center; color: var(--muted); padding: 2.4rem 1rem; }
@@ -802,10 +826,18 @@ a.list__item:hover { border-color: var(--brand-300); transform: translateX(-2px)
   background: rgba(255, 255, 255, .18); border: 1px solid rgba(255, 255, 255, .25);
 }
 .id-card__body { display: flex; align-items: center; gap: .85rem; margin: 1rem 0 .9rem; }
-.id-card__photo {
-  width: 66px; height: 66px; border-radius: 50%; object-fit: cover; flex: 0 0 auto;
-  border: 3px solid var(--sun-400); background: #fff; color: var(--brand-800);
-  display: grid; place-content: center; font-weight: 800; font-size: 1.4rem;
+.id-card__emblem {
+  position: relative; isolation: isolate; width: 68px; height: 68px; flex: 0 0 auto;
+  display: grid; place-content: center; color: var(--brand-900); font-weight: 800; font-size: 1.5rem; line-height: 1;
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, .3));
+}
+.id-card__emblem::before, .id-card__emblem::after {
+  content: ''; position: absolute; inset: 15%; border-radius: 24%; background: var(--sun-400); z-index: -1;
+}
+.id-card__emblem::after { transform: rotate(45deg); background: #f7bd62; }
+.id-card__emblem b {
+  display: grid; place-content: center; width: 1.9em; height: 1.9em; border-radius: 50%;
+  box-shadow: inset 0 0 0 2px rgba(11, 45, 60, .28);
 }
 .id-card__id { min-width: 0; flex: 1; }
 .id-card__name, .id-card__meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -824,7 +856,7 @@ a.list__item:hover { border-color: var(--brand-300); transform: translateX(-2px)
   letter-spacing: 3px; font-variant-numeric: tabular-nums;
 }
 .id-card--compact { padding: .8rem .9rem .9rem; border-radius: 18px; }
-.id-card--compact .id-card__photo { width: 52px; height: 52px; font-size: 1.1rem; }
+.id-card--compact .id-card__emblem { width: 54px; height: 54px; font-size: 1.2rem; }
 .id-card--compact .id-card__name { font-size: 1rem; }
 
 /* وضع العرض للمسح: شاشة بيضاء وباركود كبير */
@@ -867,12 +899,15 @@ a.list__item:hover { border-color: var(--brand-300); transform: translateX(-2px)
   inset-inline-end: -40px; top: -70px; background: rgba(255, 255, 255, .08);
 }
 .hero--gold { background: radial-gradient(70% 100% at 90% 0%, rgba(255, 255, 255, .35), transparent 60%), var(--grad-sun); color: #3d2507; }
+/* شارة الفارس بيضاء فوق الخلفية الذهبية حتى لا تذوب فيها */
+.hero--gold .em-1 { --em-bg: #fff; --em-fg: var(--sun-600); --em-ring: rgba(209, 125, 12, .35); }
+.hero--gold .em-1::before { background: #fff3df; }
 .hero--green { background: radial-gradient(70% 100% at 90% 0%, rgba(255, 255, 255, .22), transparent 60%), var(--grad-sage); }
 .hero h2 { font-size: 1rem; opacity: .92; margin: 0 0 .7rem; display: flex; align-items: center; gap: .4rem; }
 .hero .name { font-size: 1.65rem; font-weight: 800; line-height: 1.2; }
 .hero .meta { opacity: .92; }
 .hero__body { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; position: relative; z-index: 1; }
-.hero .avatar { box-shadow: 0 0 0 4px rgba(255, 255, 255, .55), 0 14px 28px -12px rgba(0, 0, 0, .5); }
+.hero .avatar { filter: drop-shadow(0 0 3px rgba(255, 255, 255, .7)) drop-shadow(0 14px 16px rgba(0, 0, 0, .35)); }
 
 /* ---- الإشعارات والنوافذ -------------------------------------------------- */
 .toasts {

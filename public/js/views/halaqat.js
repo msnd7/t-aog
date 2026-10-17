@@ -1,6 +1,6 @@
 /** شاشة المجموعات (الحلقات): ترتيب الحلقات ونقاطها وأعضاؤها */
 import { api } from '../api.js';
-import { esc, num, nb, avatar, rankBadge, emptyState, modal, formValues, ok, fail, periodPick, dateAr, icon, menu, menuItem } from '../ui.js';
+import { esc, num, nb, rankBadge, emptyState, modal, formValues, ok, fail, periodPick, dateAr, icon, menu, menuItem } from '../ui.js';
 import { awardPointsModal } from './shared.js';
 import { cardsModal } from './students.js';
 
@@ -81,7 +81,6 @@ async function renderDetail(id) {
             ${data.members.map((student) => `
               <a class="list__item" href="#/students/${student.id}" style="text-decoration:none;color:inherit">
                 ${rankBadge(student.rank)}
-                ${avatar(student)}
                 <div style="flex:1"><strong>${esc(student.name)}</strong><span class="muted small">${esc(student.barcode || '')}</span></div>
                 <span class="points-pill">${num(student.points)}</span>
               </a>`).join('')}

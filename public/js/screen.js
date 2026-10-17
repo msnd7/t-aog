@@ -8,7 +8,6 @@ const esc = (value) => String(value ?? '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const num = (value) => Number(value || 0).toLocaleString('en-US');
 const nb = (value) => `<bdi>${num(value)}</bdi>`;
-const initials = (name) => String(name || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('');
 
 const stage = document.getElementById('stage');
 const dots = document.getElementById('dots');
@@ -36,10 +35,12 @@ let rotateSeconds = 14;
 /** عدد شرائح قسم الأسبوع في أول القائمة */
 let weekCount = 0;
 
-function photo(person, cls = '') {
-  return person && person.photo
-    ? `<img class="${cls}" src="${esc(person.photo)}" alt="${esc(person.name)}">`
-    : `<span class="${cls} ph">${esc(initials(person && person.name))}</span>`;
+/** شارة المركز بدل صورة الطالب: نجمة ثمانية ذهبية للأول وفضية للثاني وخضراء للثالث */
+const RANK_WORDS = { 1: 'الأول', 2: 'الثاني', 3: 'الثالث' };
+function star(rank, cls = '', { word = false } = {}) {
+  const tone = rank <= 3 ? ` star--${rank}` : '';
+  const label = word && RANK_WORDS[rank] ? `<small>${RANK_WORDS[rank]}</small>` : '';
+  return `<span class="star${tone} ${cls}"><b>${num(rank)}${label}</b></span>`;
 }
 
 const title = (name, text) => `<h2 class="slide__title">${icon(name, { size: 44, stroke: 1.6 })}<span class="ttl">${esc(text)}</span></h2>`;
@@ -48,7 +49,7 @@ const title = (name, text) => `<h2 class="slide__title">${icon(name, { size: 44,
 const titles = () => data.titles || { knight: 'فارس الأسبوع', halaqa: 'حلقة الأسبوع' };
 
 /**
- * شريحة الفارس: صورته ونقاطه، مع الوصيفين إن مُرّروا،
+ * شريحة الفارس: شارة المركز الأول ونقاطه، مع الوصيفين إن مُرّروا،
  * وسطر إضافي (extra) لنقاطه منذ بداية فترة الشاشة في شريحة فارس الأسبوع.
  */
 function knightSlide(knight, { heading, sub, runners = [], extra = '' }) {
@@ -59,9 +60,7 @@ function knightSlide(knight, { heading, sub, runners = [], extra = '' }) {
       <p class="slide__sub">${esc(sub)}</p>
       <div class="knight">
         <div class="knight__frame">
-          ${knight.photo
-    ? `<img class="knight__photo" src="${esc(knight.photo)}" alt="${esc(knight.name)}">`
-    : `<div class="knight__photo">${esc(initials(knight.name))}</div>`}
+          ${star(1, 'knight__star', { word: true })}
         </div>
         <div>
           <div class="knight__name">${esc(knight.name)}</div>
@@ -70,9 +69,9 @@ function knightSlide(knight, { heading, sub, runners = [], extra = '' }) {
           ${extra}
           ${runners.length ? `
             <div class="runners">
-              ${runners.map((student) => `
+              ${runners.map((student, i) => `
                 <div class="runner">
-                  ${photo(student)}
+                  ${star(i + 2)}
                   <div><b>${esc(student.name)}</b><span>${nb(student.points)} نقطة</span></div>
                 </div>`).join('')}
             </div>` : ''}
@@ -129,7 +128,7 @@ function podiumSlide() {
       <div class="podium">
         ${order.map((student) => `
           <div class="podium__col podium__col--${student.rank}">
-            ${photo(student, 'podium__photo')}
+            ${star(student.rank, 'podium__star', { word: true })}
             <div class="podium__name">${esc(student.name)}</div>
             <div class="podium__meta">${esc(student.halaqa_name || '')}</div>
             <div class="podium__bar">
@@ -148,7 +147,7 @@ const PER_PAGE = ROWS_PER_COLUMN * 2;
 const studentRow = (student) => `
   <div class="row">
     <span class="rank r${student.rank <= 3 ? student.rank : ''}">${student.rank}</span>
-    <span class="who">${photo(student)}<b>${esc(student.name)}</b>
+    <span class="who"><b>${esc(student.name)}</b>
       <span class="sub">${esc(student.halaqa_name || '')}</span></span>
     <span class="pts">${num(student.points)}</span>
   </div>`;

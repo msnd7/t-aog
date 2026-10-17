@@ -70,7 +70,6 @@ function chequeMarkup(cheque, settings) {
           </div>
         </div>
         <div class="cheque__side">
-          ${cheque.student_photo ? `<img class="cheque__photo" src="${esc(cheque.student_photo)}" alt="">` : ''}
           <svg data-barcode="${esc(cheque.student_barcode || '')}"></svg>
           <div class="code">${esc(cheque.student_barcode || '')}</div>
         </div>
