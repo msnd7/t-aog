@@ -695,17 +695,78 @@ async function initSchema() {
   await seedDefaultSettings();
   await migrateMosques();
   await migrateRewards();
-  await purgeExpiredSessions();
+  try {
+    await cleanupStorage();
+  } catch (err) {
+    // التنظيف تحسين لا شرط: لا يوقف تشغيل المنصة إن تعذّر
+    console.error('تعذّر تنظيف التخزين:', err);
+  }
 }
 
-/** الجلسات المنتهية لا فائدة منها: تُحذف مع كل تشغيل ومع كل دخول جديد */
-async function purgeExpiredSessions() {
-  try {
-    await rawRun('DELETE FROM sessions WHERE expires_at < ?', [new Date().toISOString()]);
-  } catch (err) {
-    // تحسين لا شرط: لا يوقف تشغيل المنصة إن تعذّر
-    console.error('تعذّر حذف الجلسات المنتهية:', err);
+/** اسم الملف من رابط /uploads/<name>، أو null لغير ذلك */
+const uploadName = (url) => {
+  const match = /^\/uploads\/([^/?#]+)$/.exec(String(url || ''));
+  return match ? match[1] : null;
+};
+
+/** لا تُحذف صورة غير مرتبطة قبل مرور يوم عليها، حتى لا تُحذف صورة يجري رفعها الآن */
+const ORPHAN_AGE_MS = 24 * 3600 * 1000;
+/** التنظيف الكامل مرة في اليوم على الأكثر؛ الجلسات المنتهية تُحذف أيضاً مع كل دخول */
+const CLEANUP_EVERY_MS = 24 * 3600 * 1000;
+
+/**
+ * تخفيف حمل التخزين، آمن للتكرار:
+ * - صور الطلاب أُلغيت من المنصة: تُحذف ملفاتها ويُفرَّغ عمود photo.
+ * - الجلسات المنتهية تُحذف.
+ * - الصور التي لم تعد مرتبطة بجائزة أو بالشعار (بعد استبدالها) تُحذف من القاعدة ومن القرص.
+ */
+async function cleanupStorage({ force = false } = {}) {
+  const now = Date.now();
+  if (!force) {
+    const last = await rawGet("SELECT value FROM settings WHERE key = 'storage_cleaned_at'", []);
+    if (last && now - Date.parse(last.value) < CLEANUP_EVERY_MS) return null;
   }
+  const done = { photos: 0, uploads: 0, files: 0 };
+  const removeFile = (name) => {
+    try { fs.unlinkSync(path.join(UPLOAD_DIR, name)); done.files += 1; } catch { /* غير موجود على القرص */ }
+  };
+
+  const photos = await rawAll('SELECT photo FROM users WHERE photo IS NOT NULL', []);
+  for (const row of photos) {
+    const name = uploadName(row.photo);
+    if (!name) continue;
+    await rawRun('DELETE FROM uploads WHERE name = ?', [name]);
+    removeFile(name);
+  }
+  if (photos.length) await rawRun('UPDATE users SET photo = NULL WHERE photo IS NOT NULL', []);
+  done.photos = photos.length;
+
+  await rawRun('DELETE FROM sessions WHERE expires_at < ?', [new Date(now).toISOString()]);
+
+  const used = new Set();
+  for (const row of await rawAll('SELECT image FROM rewards WHERE image IS NOT NULL', [])) used.add(uploadName(row.image));
+  for (const row of await rawAll("SELECT value FROM settings WHERE key = 'logo'", [])) used.add(uploadName(row.value));
+  const before = new Date(now - ORPHAN_AGE_MS).toISOString();
+  for (const row of await rawAll('SELECT DISTINCT name FROM uploads WHERE created_at < ?', [before])) {
+    if (used.has(row.name)) continue;
+    await rawRun('DELETE FROM uploads WHERE name = ?', [row.name]);
+    done.uploads += 1;
+  }
+  let onDisk = [];
+  try { onDisk = fs.readdirSync(UPLOAD_DIR, { withFileTypes: true }); } catch { /* لا مجلد صور */ }
+  for (const entry of onDisk) {
+    if (!entry.isFile() || used.has(entry.name) || !/\.(jpe?g|png|webp|gif)$/i.test(entry.name)) continue;
+    let stat;
+    try { stat = fs.statSync(path.join(UPLOAD_DIR, entry.name)); } catch { continue; }
+    if (now - stat.mtimeMs >= ORPHAN_AGE_MS) removeFile(entry.name);
+  }
+
+  await rawRun("DELETE FROM settings WHERE key = 'allow_student_photo_upload'", []);
+  await rawRun("DELETE FROM mosque_settings WHERE key = 'allow_student_photo_upload'", []);
+  await rawRun(`INSERT INTO settings (key, value) VALUES ('storage_cleaned_at', ?)
+    ON CONFLICT (key) DO UPDATE SET value = excluded.value`, [new Date(now).toISOString()]);
+  if (done.photos || done.uploads || done.files) console.log('تنظيف التخزين:', done);
+  return done;
 }
 
 /**
@@ -804,5 +865,6 @@ async function setMosqueSetting(mosqueId, key, value) {
 
 module.exports = {
   db, get ready() { return schemaReady(); }, DATA_DIR, UPLOAD_DIR, REMOTE_DB, UPLOADS_IN_DB,
+  cleanupStorage: async (options) => { await schemaReady(); return cleanupStorage(options); },
   getSettings, getSetting, setSetting, setMosqueSetting, DEFAULT_SETTINGS, MOSQUE_SETTING_KEYS, DEFAULT_MOSQUES
 };
